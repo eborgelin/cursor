@@ -1,0 +1,119 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f4f1ea;
+  --card: #fffdf8;
+  --ink: #1c1916;
+  --muted: #6b645c;
+  --line: #d9d2c6;
+  --accent: #1f4d3a;
+  --accent-ink: #f4f1ea;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161412;
+    --card: #221f1b;
+    --ink: #f4f1ea;
+    --muted: #b3aaa0;
+    --line: #3a342c;
+    --accent: #8fbfa6;
+    --accent-ink: #161412;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 1.5rem;
+}
+
+.card {
+  width: min(28rem, 100%);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2.25rem;
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.lede,
+.status,
+label {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+button {
+  font: inherit;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+input {
+  flex: 1;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+.status {
+  min-height: 1.25rem;
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
