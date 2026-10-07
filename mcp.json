@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "splunk": {
+      "type": "http",
+      "url": "${SPLUNK_MCP_URL}",
+      "headers": {
+        "Authorization": "Bearer ${SPLUNK_MCP_TOKEN}"
+      }
+    }
+  }
+}

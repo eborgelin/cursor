@@ -1,0 +1,9 @@
+.DS_Store
+.env
+.env.*
+*.token
+*.pem
+*.key
+.idea/
+.vscode/
+node_modules/

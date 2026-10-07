@@ -1,0 +1,8 @@
+Splunk Cursor Plugin
+Copyright 2026 eborgelin
+
+This product is licensed under the Apache License, Version 2.0.
+
+Splunk is a trademark of Cisco Systems, Inc. or its affiliates. This plugin is
+an independent Cursor integration with the Splunk MCP Server. It is not
+affiliated with, endorsed by, or sponsored by Cisco or Splunk Inc.

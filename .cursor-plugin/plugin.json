@@ -1,0 +1,56 @@
+{
+  "name": "splunk",
+  "displayName": "Splunk",
+  "version": "1.0.0",
+  "minClientVersions": {
+    "cursor": "3.13.0"
+  },
+  "description": "Search logs, run SPL, inspect indexes, and investigate incidents in Splunk.",
+  "author": {
+    "name": "eborgelin",
+    "email": "31154338+eborgelin@users.noreply.github.com"
+  },
+  "homepage": "https://help.splunk.com/en/splunk-cloud-platform/mcp-server-for-splunk-platform/1.1/about-mcp-server-for-splunk-platform",
+  "repository": "https://github.com/eborgelin/cursor",
+  "license": "Apache-2.0",
+  "logo": "assets/logo.svg",
+  "keywords": [
+    "splunk",
+    "spl",
+    "logging",
+    "observability",
+    "siem",
+    "search",
+    "mcp",
+    "security",
+    "dashboards",
+    "incident response"
+  ],
+  "category": "integrations",
+  "tags": [
+    "splunk",
+    "mcp",
+    "observability",
+    "security"
+  ],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "SPLUNK_MCP_URL": {
+        "type": "string",
+        "title": "Splunk MCP server URL",
+        "description": "Streamable HTTP endpoint copied from the Splunk MCP Server app. Example: the URL shown in the app after install. Do not use the deprecated *.api.scs.splunk.com On-Cloud endpoint for new deployments."
+      },
+      "SPLUNK_MCP_TOKEN": {
+        "type": "string",
+        "title": "Encrypted MCP token",
+        "description": "Encrypted authentication token generated in the Splunk MCP Server app. Encrypted tokens cannot be reused for direct Splunk REST API calls. Never commit this value."
+      }
+    },
+    "required": [
+      "SPLUNK_MCP_URL",
+      "SPLUNK_MCP_TOKEN"
+    ]
+  },
+  "mcpServers": "./mcp.json"
+}

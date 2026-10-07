@@ -1,0 +1,38 @@
+---
+description: Use Splunk MCP tools safely — discover first, keep searches bounded, and never store credentials.
+alwaysApply: true
+---
+
+# Splunk MCP
+
+When this plugin is installed, talk to Splunk through the `splunk` MCP server. Do not fall back to curl against the Splunk REST API, helper scripts, or hardcoded tokens.
+
+## Credentials
+
+- Plugin variables `SPLUNK_MCP_URL` and `SPLUNK_MCP_TOKEN` are the only connection settings. Never write their values into files, commits, logs, dashboard JSON, or chat replies.
+- Encrypted MCP tokens cannot be reused as Splunk REST bearer tokens. Do not try them against `/services/...` endpoints.
+
+## Tooling
+
+- Core tools are prefixed `splunk_`. Splunk AI Assistant tools are prefixed `saia_` and are only present when that app is installed.
+- Administrators may disable tools server-side. If a tool is missing, continue with the tools that remain and say so.
+- Prefer an existing saved search (`splunk_get_knowledge_objects` type `saved_searches`, then `splunk_run_saved_search` when available) over generating new SPL.
+
+## Search guardrails
+
+`splunk_run_query` is for quick, non-destructive searches. It may fail if the SPL is unsafe or destructive, runtime exceeds 1 minute, or the response exceeds 1000 events.
+
+- Always set a tight time range (`earliest`/`latest` or equivalent in SPL).
+- Filter with `index`, `sourcetype`, `source`, or `host` before expensive commands.
+- Use `| stats`, `| timechart`, `| tstats`, or `| head` so results stay under 1000 rows.
+- Do not run `| delete`, `| outputlookup` (unless the user explicitly asked to write a lookup), collect, or other mutating commands through MCP.
+
+## Investigation order
+
+1. `splunk_get_info` and `splunk_get_indexes` to confirm the instance and data.
+2. `splunk_get_metadata` to find hosts, sources, and sourcetypes in the window.
+3. Knowledge objects (`saved_searches`, `macros`, `lookups`, `data_models`) before inventing SPL.
+4. `saia_generate_spl` / `saia_optimize_spl` when those tools exist; otherwise write conservative SPL.
+5. `splunk_run_query` (or `splunk_run_saved_search`) last.
+
+Redact passwords, tokens, session IDs, and raw PII in summaries. Quote only the fields needed to answer the question.
