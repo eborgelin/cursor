@@ -148,6 +148,24 @@ func lockPresentationFormat(_ device: AudioDeviceID) -> String? {
     return "\(Int(format.mSampleRate)) Hz, \(format.mChannelsPerFrame) ch, \(format.mBitsPerChannel)-bit"
 }
 
+func boolProperty(_ device: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> Bool? {
+    var address = addr(device, selector)
+    var value: UInt32 = 0
+    var size = UInt32(MemoryLayout<UInt32>.size)
+    guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr else {
+        return nil
+    }
+    return value != 0
+}
+
+/// Listing the HDMI device is not enough — HAL still publishes a dead clock.
+/// The reliable probe is StartIO (afplay). A 10 s hang then exit 1 is 'stop'.
+func describeClock(_ device: AudioDeviceID) {
+    let alive = boolProperty(device, kAudioDevicePropertyDeviceIsAlive).map { $0 ? "yes" : "no" } ?? "?"
+    let running = boolProperty(device, kAudioDevicePropertyDeviceIsRunning).map { $0 ? "yes" : "no" } ?? "?"
+    print("  HAL alive=\(alive)  IO running=\(running)  (alive+not-running is normal until StartIO)")
+}
+
 func playDing() -> Int32 {
     let play = Process()
     play.executableURL = URL(fileURLWithPath: "/usr/bin/afplay")
@@ -201,6 +219,72 @@ func bounceThroughSpeakers(then device: AudioDeviceID) {
         Thread.sleep(forTimeInterval: 2)
     }
     _ = setDefaultOutput(device)
+}
+
+func runTool(_ path: String, _ args: [String]) -> Int32 {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: path)
+    process.arguments = args
+    do {
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    } catch {
+        fputs("Could not run \(path): \(error)\n", stderr)
+        return 1
+    }
+}
+
+func waitForDevice(named name: String, transport: String, timeout: TimeInterval) -> AudioDeviceID? {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if let found = relocateDevice(named: name, transport: transport) {
+            return found
+        }
+        Thread.sleep(forTimeInterval: 1)
+    }
+    return relocateDevice(named: name, transport: transport)
+}
+
+/// Display sleep/wake retrains the HDMI link (DCP) without logging out.
+func retrainDisplaySleep() {
+    print("\nSleeping the displays for 8 seconds to retrain the HDMI link…")
+    print("The screens will go dark, then wake. Leave the HDMI cable plugged in.")
+    _ = runTool("/usr/bin/pmset", ["displaysleepnow"])
+    Thread.sleep(forTimeInterval: 8)
+    _ = runTool("/usr/bin/caffeinate", ["-u", "-t", "3"])
+    _ = runTool("/usr/bin/osascript", ["-e", "tell application \"System Events\" to key code 123"])
+    print("Waiting 6 seconds for HDMI audio to reappear…")
+    Thread.sleep(forTimeInterval: 6)
+}
+
+/// System sleep is closer to a DCP reset than display-sleep-only. Apps stay open.
+func retrainSystemSleep() {
+    print("\nThe Mac will sleep. After ~10 seconds, press a key or open the lid to wake.")
+    print("Leave the HDMI cable plugged in the whole time.")
+    Thread.sleep(forTimeInterval: 2)
+    _ = runTool("/usr/bin/pmset", ["sleepnow"])
+    print("Woke. Waiting 8 seconds for HDMI…")
+    Thread.sleep(forTimeInterval: 8)
+}
+
+func reselectChosen(_ name: String, _ transport: String) -> AudioDeviceID {
+    if let found = waitForDevice(named: name, transport: transport, timeout: 20) {
+        print("HDMI device is \(audioDeviceName(found)).")
+        return found
+    }
+    print("The HDMI device is not back yet. Pick from the list.")
+    return pickOutputDevice()
+}
+
+func dingAfterRetrain(_ name: String, _ transport: String) -> (AudioDeviceID, Bool, Bool) {
+    let device = reselectChosen(name, transport)
+    let queueOK = applyAndDing(device) == 0
+    var heard = false
+    if queueOK {
+        heard = askYesNo("Can you hear the ding in the room speakers now?", defaultYes: true)
+    }
+    return (device, queueOK, heard)
 }
 
 func displayIDs() -> [CGDirectDisplayID] {
@@ -399,7 +483,8 @@ func applyAndDing(_ device: AudioDeviceID) -> Int32 {
     }
     print("Waiting 3 seconds for the device…")
     Thread.sleep(forTimeInterval: 3)
-    print("Playing ding…")
+    describeClock(device)
+    print("Probing HDMI clock via StartIO (silent if it fails; ~10 s wait if the clock is dead)…")
     let code = playDing()
     if code == 0 {
         print("macOS started the sound (afplay exit 0).")
@@ -409,7 +494,7 @@ func applyAndDing(_ device: AudioDeviceID) -> Int32 {
     return code
 }
 
-print("Room presentation check")
+print("Room presentation check  v2026.10.15-detect")
 print("Plug in the room cable first. Do not start YouTube or PowerPoint yet.\n")
 
 let uptimeHours = ProcessInfo.processInfo.systemUptime / 3600
@@ -465,29 +550,76 @@ var heard = false
 if queueOK {
     heard = askYesNo("Can you hear the ding in the room speakers?", defaultYes: true)
 } else {
-    print("You likely heard nothing in the room. macOS never started HDMI I/O ('stop' / 0 frames).")
+    print("\nHDMI CLOCK DEAD")
+    print("The sink is visible and the format can be set, but StartIO returned 'stop' (0 frames).")
+    print("That is the display coprocessor clock, not a missing cable. Unplugging HDMI is not required to know this.")
     heard = false
 }
 
 if !heard {
-    if unsafeRoomMode || askYesNo("Try 1080p60/4K60 1x, bounce HDMI, and restart Core Audio?", defaultYes: true) {
-        if unsafeRoomMode {
-            _ = applySafeRoomModes()
+    print("\nRecommended fix: Restart with the HDMI cable left plugged in, then run this script before Chrome or PowerPoint.")
+    if askYesNo("Open the Restart dialog now? (Leave HDMI connected.)", defaultYes: true) {
+        _ = runTool("/usr/bin/osascript", ["-e", "tell application \"System Events\" to restart"])
+        print("If Restart was cancelled, you can still try a Core Audio restart or a soft HDMI retrain below.")
+    }
+}
+
+if !heard && (unsafeRoomMode || askYesNo("Clock is still dead. Try format/Core Audio restart before giving up?", defaultYes: false)) {
+    if unsafeRoomMode {
+        _ = applySafeRoomModes()
+    }
+    bounceThroughSpeakers(then: device)
+    if resetCoreAudio() {
+        if let found = relocateDevice(named: chosenName, transport: chosenTransport) {
+            device = found
+            print("Re-selected \(audioDeviceName(device)) (HAL id can change after a Core Audio restart).")
+        } else {
+            print("The previous device disappeared after the reset. Pick again.")
+            device = pickOutputDevice()
         }
-        bounceThroughSpeakers(then: device)
-        if resetCoreAudio() {
-            if let found = relocateDevice(named: chosenName, transport: chosenTransport) {
-                device = found
-                print("Re-selected \(audioDeviceName(device)) (HAL id can change after a Core Audio restart).")
-            } else {
-                print("The previous device disappeared after the reset. Pick again.")
-                device = pickOutputDevice()
-            }
-            queueOK = applyAndDing(device) == 0
-            if queueOK {
-                heard = askYesNo("Can you hear the ding in the room speakers now?", defaultYes: true)
-            }
+        queueOK = applyAndDing(device) == 0
+        if queueOK {
+            heard = askYesNo("Can you hear the ding in the room speakers now?", defaultYes: true)
         }
+    }
+}
+
+if !heard {
+    print("\nSoft retrains (optional). They do not always work; reboot with the cable in is the reliable fix.")
+    print("Display sleep only — apps stay open, no logout.")
+    if askYesNo("Sleep the screens for 8 seconds to retrain HDMI?", defaultYes: false) {
+        retrainDisplaySleep()
+        let result = dingAfterRetrain(chosenName, chosenTransport)
+        device = result.0
+        queueOK = result.1
+        heard = result.2
+    }
+}
+
+if !heard {
+    print("\nUnplug/replug forces a full HDMI link retrain. Leave this window open.")
+    if askYesNo("I will unplug HDMI for 5 seconds, then plug it back in. Continue?", defaultYes: false) {
+        if let speakers = macSpeakers() { _ = setDefaultOutput(speakers) }
+        print("Unplug the HDMI (or USB-C) cable now.")
+        _ = prompt("Press Enter after it is unplugged.")
+        Thread.sleep(forTimeInterval: 5)
+        print("Plug the same cable back in. Wait until the room screen appears.")
+        _ = prompt("Press Enter when the room screen is back.")
+        let result = dingAfterRetrain(chosenName, chosenTransport)
+        device = result.0
+        queueOK = result.1
+        heard = result.2
+    }
+}
+
+if !heard {
+    print("\nSystem sleep is the strongest soft reset short of a reboot.")
+    if askYesNo("Sleep the Mac now (wake with a key after ~10 seconds)?", defaultYes: false) {
+        retrainSystemSleep()
+        let result = dingAfterRetrain(chosenName, chosenTransport)
+        device = result.0
+        queueOK = result.1
+        heard = result.2
     }
 }
 
@@ -506,7 +638,8 @@ if heard {
         }
     }
 } else {
-    print("FAIL: HDMI/room audio I/O did not start. Format lock and Core Audio restart cannot unwedge this clock.")
+    print("FAIL: HDMI I/O still did not start after Core Audio restart, display sleep, cable retrain, and optional system sleep.")
+    print("Userspace cannot restart the display coprocessor clock; a full reboot with the cable plugged in is required.")
     if uptimeHours >= 12 {
         print("This session has been up \(Int(uptimeHours)) hours. Reboot with the room cable already connected,")
         print("log in, then run this script before opening Chrome or PowerPoint.")
