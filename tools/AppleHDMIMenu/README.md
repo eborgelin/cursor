@@ -2,7 +2,7 @@
 
 Menu-bar watcher for the M4 Pro HDMI audio clock. It stays idle until an external display is connected and an HDMI audio device appears, runs one silent clock test, then waits again.
 
-The menu-bar icon stays hidden when HDMI is absent or the clock is fine. A dead clock shows an HDMI symbol with a red X. Hover that icon for the restart instruction.
+The menu-bar icon stays hidden when HDMI is absent or the clock is fine. A dead clock shows the system cable-connector symbol with a slash, in red. Hover that icon for the restart instruction.
 
 Left-click and right-click open the same menu:
 

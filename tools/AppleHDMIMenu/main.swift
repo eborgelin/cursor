@@ -146,6 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let button = statusItem.button {
             button.image = idleImage
             button.imagePosition = .imageOnly
+            button.imageScaling = .scaleProportionallyDown
             button.target = self
             button.action = #selector(statusClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -334,56 +335,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         if clock == .dead {
             button.image = deadImage
+            button.image?.isTemplate = false
+            button.contentTintColor = nil
             button.toolTip = restartTooltip
         } else {
             button.image = idleImage
+            button.image?.isTemplate = true
+            button.contentTintColor = nil
             button.toolTip = nil
         }
     }
 
+    /// Menu-bar glyphs from the system symbol set so they match the current menu bar.
+    /// Idle uses a template connector (light and dark). A dead clock uses the slashed
+    /// connector in system red, the same "unavailable" language as Wi-Fi.
     private static func hdmiImage(markedDead: Bool) -> NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-            let body = NSBezierPath()
-            body.move(to: NSPoint(x: 2, y: 5))
-            body.line(to: NSPoint(x: 2, y: 11))
-            body.line(to: NSPoint(x: 5, y: 14))
-            body.line(to: NSPoint(x: 13, y: 14))
-            body.line(to: NSPoint(x: 16, y: 11))
-            body.line(to: NSPoint(x: 16, y: 5))
-            body.close()
-
-            let pins = NSBezierPath()
-            for pinX in stride(from: CGFloat(5), through: 12, by: 2.2) {
-                pins.move(to: NSPoint(x: pinX, y: 7))
-                pins.line(to: NSPoint(x: pinX, y: 10))
-            }
-
-            if markedDead {
-                NSColor.white.setFill()
-                body.fill()
-                NSColor.black.setStroke()
-                body.lineWidth = 1.3
-                body.stroke()
-                pins.lineWidth = 1
-                pins.stroke()
-                let cross = NSBezierPath()
-                cross.move(to: NSPoint(x: 3.5, y: 3.5))
-                cross.line(to: NSPoint(x: 14.5, y: 14.5))
-                cross.move(to: NSPoint(x: 14.5, y: 3.5))
-                cross.line(to: NSPoint(x: 3.5, y: 14.5))
-                cross.lineWidth = 2.2
-                cross.lineCapStyle = .round
-                NSColor.systemRed.setStroke()
-                cross.stroke()
-            } else {
-                NSColor.black.setStroke()
-                body.lineWidth = 1.4
-                body.stroke()
-                pins.lineWidth = 1
-                pins.stroke()
-            }
-            return true
+        let name = markedDead ? "cable.connector.slash" : "cable.connector"
+        let description = markedDead ? "HDMI audio clock is dead" : "HDMI"
+        var config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold, scale: .medium)
+        if markedDead {
+            config = config.applying(NSImage.SymbolConfiguration(hierarchicalColor: .systemRed))
         }
+        let symbol = NSImage(systemSymbolName: name, accessibilityDescription: description)?
+            .withSymbolConfiguration(config)
+        let image = symbol ?? NSImage(systemSymbolName: "cable.connector", accessibilityDescription: description) ?? NSImage()
         image.isTemplate = !markedDead
         return image
     }
