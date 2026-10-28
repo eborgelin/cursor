@@ -1,0 +1,15 @@
+target_id,value,unit,label
+shift_hours,8,h,Illustrative shift length
+shift_draw_plan_t,8000,t,Illustrative shift draw plan
+shift_hoist_plan_t,8000,t,Illustrative shift hoist plan
+day_plan_t,16000,t,Illustrative day plan
+fourteen_day_plan_t,224000,t,Illustrative 14 day plan
+truck_payload_t,32,t,Illustrative truck payload when loaded
+lhd_bucket_t,12,t,Illustrative LHD bucket
+truck_loaded_speed_kmh,12,km/h,Illustrative loaded speed
+truck_empty_speed_kmh,18,km/h,Illustrative empty speed
+fe_target_pct,67,%,Illustrative Fe target
+sio2_ceiling_pct,1.2,%,Illustrative SiO2 ceiling
+p_ceiling_pct,0.035,%,Illustrative P ceiling
+rail_share_narvik,0.7,ratio,Illustrative rail share toward Narvik
+rail_share_lulea,0.3,ratio,Illustrative rail share toward Luleå

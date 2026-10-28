@@ -1,0 +1,4 @@
+pass_id,from_level_m,to_level_m,crusher_id,shift_plan_t,label
+KIR-OP-1220-A,1220,1365,KIR-CRU-01,3200,Ore pass 1220-A (störtschakt)
+KIR-OP-1220-B,1220,1365,KIR-CRU-02,2400,Ore pass 1220-B (störtschakt)
+KIR-OP-1288-A,1288,1365,KIR-CRU-02,2400,Ore pass 1288-A (störtschakt)

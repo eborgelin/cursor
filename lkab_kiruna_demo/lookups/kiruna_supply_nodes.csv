@@ -1,0 +1,8 @@
+node_id,node_order,baseline_t,label
+underground,1,45000,Underground (ore in passes and drawpoints)
+buffers,2,8000,Buffer pockets (buffertfickor)
+plant,3,25000,Processing plant (malmförädlingsverk)
+rail_in_transit,4,12000,Rail in transit (Malmbanan)
+narvik_port,5,60000,Narvik port
+lulea_port,6,20000,Luleå port
+seafreight,7,30000,Seafreight

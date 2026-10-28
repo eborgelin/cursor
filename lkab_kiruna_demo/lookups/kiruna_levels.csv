@@ -1,0 +1,17 @@
+level_m,svg_region_id,role,live,label
+0,surface-plant,surface,0,Processing plant (malmförädlingsverk)
+0,surface-rail,surface,0,Railway to Narvik/Luleå (järnväg)
+142,lvl-142,historic,0,142 m
+230,lvl-230,historic,0,230 m
+275,lvl-275,historic,0,275 m
+320,lvl-320,historic,0,320 m
+420,lvl-420,historic,0,420 m
+540,lvl-540,historic,0,540 m
+740,lvl-740,historic,0,740 m
+775,lvl-775,historic,0,775 m
+1045,lvl-1045,poster_main_level,0,1045 m main level on the poster (huvudnivå)
+1060,lvl-1060,exploration,0,1060 m exploration drift (undersökningsort)
+1082,lvl-1082,scale_mark,0,1082 m
+1220,lvl-1220,demo_sublevel,1,1220 m demo sublevel
+1288,lvl-1288,demo_sublevel,1,1288 m demo sublevel
+1365,lvl-1365,demo_main_level,1,1365 m demo main level (poster: kommande huvudnivå)
