@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "2.0.0",
+  "info": {
+    "title": "Kiirunavaara Mine Demo",
+    "id": {
+      "group": null,
+      "name": "lkab_kiruna_demo",
+      "version": "0.1.0"
+    },
+    "author": [
+      {
+        "name": "Splunk SE demo team",
+        "email": null,
+        "company": null
+      }
+    ],
+    "releaseDate": null,
+    "description": "Unofficial Splunk demo of a synthetic Kiirunavaara sublevel-caving shift. All data, tonnes, grades, and targets are generated, illustrative fixtures. Not an LKAB product and not LKAB production data.",
+    "classification": {
+      "intendedAudience": null,
+      "categories": [],
+      "developmentStatus": null
+    },
+    "commonInformationModels": null,
+    "license": {
+      "name": null,
+      "text": null,
+      "uri": null
+    },
+    "privacyPolicy": {
+      "name": null,
+      "text": null,
+      "uri": null
+    },
+    "releaseNotes": {
+      "name": null,
+      "text": null,
+      "uri": null
+    }
+  },
+  "dependencies": {},
+  "tasks": [],
+  "inputGroups": {},
+  "incompatibleApps": {},
+  "platformRequirements": {
+    "splunk": {
+      "Enterprise": "*"
+    }
+  }
+}

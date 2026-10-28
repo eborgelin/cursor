@@ -1,0 +1,14 @@
+<nav search_view="search" color="#1E2128">
+  <view name="shift_brief" default="true" />
+  <view name="mine_section" />
+  <view name="level_ops" />
+  <collection label="Assets">
+    <view name="asset_health" />
+    <view name="asset_timeline" />
+    <view name="stuck_recovery" />
+  </collection>
+  <view name="service_health" />
+  <view name="outbound_overview" />
+  <view name="demo_control" />
+  <view name="search" />
+</nav>

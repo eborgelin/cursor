@@ -1,0 +1,29 @@
+.kiruna-form {
+    max-width: 640px;
+    padding: 16px 20px;
+}
+.kiruna-form h2 {
+    margin-top: 0;
+}
+.kiruna-field {
+    margin: 12px 0;
+}
+.kiruna-field label {
+    display: block;
+    font-weight: 600;
+}
+.kiruna-field input[type="checkbox"] {
+    margin-right: 6px;
+}
+.kiruna-field select,
+.kiruna-field input[type="number"] {
+    min-width: 260px;
+}
+.kiruna-msg.success {
+    color: #65A637;
+    margin-top: 12px;
+}
+.kiruna-msg.error {
+    color: #D93F3C;
+    margin-top: 12px;
+}

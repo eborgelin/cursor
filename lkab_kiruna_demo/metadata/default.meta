@@ -1,0 +1,12 @@
+[]
+access = read : [ * ], write : [ admin, power, sc_admin ]
+export = none
+
+[lkab_kiruna_demo_settings]
+access = read : [ * ], write : [ admin, power, sc_admin ]
+export = none
+
+[savedsearches]
+owner = nobody
+access = read : [ * ], write : [ admin, power, sc_admin ]
+export = none
