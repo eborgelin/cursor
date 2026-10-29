@@ -384,35 +384,68 @@ load_image_catalog() {
     --output text
 }
 
+append_images() {
+  local chunk
+  chunk=$(aws_cli ec2 describe-images "$@" \
+    --query 'Images[].[ImageId,CreationDate,Name,Architecture]' \
+    --output text)
+  if [[ -n "${chunk//[[:space:]]/}" ]]; then
+    IMAGE_CATALOG+=$'\n'"${chunk}"
+  fi
+}
+
 resolve_named_ami() {
-  local want=$1 raw id created name arch best_created best_id best_name best_arch lower ver
+  local want=$1 raw id created name arch best_created best_id best_name best_arch lower ver product
+  local exact_created exact_id exact_name exact_arch
   best_created=""
   best_id=""
   best_name=""
   best_arch=""
-  raw=$(aws_cli ec2 describe-images \
-    --executable-users self \
-    --filters "Name=name,Values=${want}" Name=state,Values=available \
-    --query 'Images[].[ImageId,CreationDate,Name,Architecture]' \
-    --output text)
-  if [[ -z "${raw//[[:space:]]/}" ]]; then
-    raw=$(aws_cli ec2 describe-images \
-      --owners self \
-      --filters "Name=name,Values=${want}" Name=state,Values=available \
-      --query 'Images[].[ImageId,CreationDate,Name,Architecture]' \
-      --output text)
+  exact_created=""
+  exact_id=""
+  exact_name=""
+  exact_arch=""
+  IMAGE_CATALOG=""
+  # A Marketplace subscription does not make this account the image owner.
+  append_images --executable-users self \
+    --filters "Name=name,Values=${want}" Name=state,Values=available
+  append_images --owners self \
+    --filters "Name=name,Values=${want}" Name=state,Values=available
+  append_images --owners aws-marketplace \
+    --filters "Name=name,Values=${want}" Name=state,Values=available
+  if [[ "$want" =~ ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$ ]]; then
+    product=${BASH_REMATCH[1]}
+    append_images --owners aws-marketplace \
+      --filters "Name=name,Values=*${product}*" Name=state,Values=available Name=architecture,Values=x86_64
   fi
-  [[ -n "${raw//[[:space:]]/}" ]] || die "No launchable image named ${want} in ${AWS_REGION}. This account must already be able to launch it. The script does not subscribe to Marketplace and does not store an AMI id."
+  raw=$IMAGE_CATALOG
+  [[ -n "${raw//[[:space:]]/}" ]] || die "No launchable image named ${want} in ${AWS_REGION}. Checked images this account owns, images shared with it, and AWS Marketplace. A Marketplace subscription does not copy the image into the account. Confirm that product is subscribed for ${AWS_REGION}. The script does not subscribe and does not store an AMI id."
   while IFS=$'\t' read -r id created name arch; do
     [[ "$id" == ami-* ]] || continue
-    if [[ -z "$best_created" || "$created" > "$best_created" ]]; then
+    [[ "$arch" == x86_64 ]] || continue
+    if [[ "$name" == "$want" ]]; then
+      if [[ -z "$exact_created" || "$created" > "$exact_created" ]]; then
+        exact_created=$created
+        exact_id=$id
+        exact_name=$name
+        exact_arch=$arch
+      fi
+    elif [[ -z "$best_created" || "$created" > "$best_created" ]]; then
       best_created=$created
       best_id=$id
       best_name=$name
       best_arch=$arch
     fi
   done <<< "$raw"
-  [[ -n "$best_id" ]] || die "Image name ${want} did not resolve to an AMI id in ${AWS_REGION}."
+  if [[ -n "$exact_id" ]]; then
+    best_id=$exact_id
+    best_name=$exact_name
+    best_arch=$exact_arch
+  fi
+  [[ -n "$best_id" ]] || die "Image name ${want} did not resolve to an x86_64 AMI id in ${AWS_REGION}."
+  if [[ "$best_name" != "$want" ]]; then
+    note "Exact image name ${want} is not in ${AWS_REGION}. Using ${best_name}, the newest x86_64 image for that Marketplace product."
+  fi
   [[ "$best_arch" == x86_64 ]] || die "Image ${best_name} is ${best_arch}. This demo uses the x86_64 Splunk image."
   lower=$(printf '%s' "$best_name" | tr '[:upper:]' '[:lower:]')
   case "$lower" in
@@ -458,7 +491,11 @@ accept_explicit_ami() {
   [[ "$state" == available ]] || die "AMI ${id} is ${state}, not available."
   [[ "$arch" == x86_64 ]] || die "AMI ${id} is ${arch}. This demo uses the x86_64 Splunk Enterprise image."
   blob="${name} ${desc}"
-  ver=$(splunk_106_version "$blob") || die "AMI ${id} (${name}) is not a Splunk Enterprise 10.6.x image."
+  ver=$(splunk_106_version "$blob" || true)
+  if [[ -z "$ver" && "$blob" =~ 10\.6\.[0-9]+(\.[0-9]+)? ]]; then
+    ver=${BASH_REMATCH[0]}
+  fi
+  [[ -n "$ver" ]] || die "AMI ${id} (${name}) is not a Splunk Enterprise 10.6.x image."
   RESOLVED_AMI=$id
   RESOLVED_AMI_NAME=$name
   RESOLVED_AMI_VERSION=$ver
@@ -1032,19 +1069,21 @@ ensure_role() {
       --role-name "$role" \
       --assume-role-policy-document "file://${tmp_dir}/trust.json" \
       --description "Kiirunavaara demo Splunk host. Session Manager only." \
-      --tags "Key=Name,Value=${role}" "Key=${TAG_KEY},Value=${TAG_VALUE}"
+      --tags "Key=Name,Value=${role}" "Key=${TAG_KEY},Value=${TAG_VALUE}" \
+      >/dev/null
   fi
-  aws_cli iam attach-role-policy --role-name "$role" --policy-arn "$SSM_POLICY_ARN"
+  aws_cli iam attach-role-policy --role-name "$role" --policy-arn "$SSM_POLICY_ARN" >/dev/null
   drop_installer_policy "$role"
   if ! aws_cli iam get-instance-profile --instance-profile-name "$profile" >/dev/null 2>&1; then
     aws_cli iam create-instance-profile --instance-profile-name "$profile" \
-      --tags "Key=Name,Value=${profile}" "Key=${TAG_KEY},Value=${TAG_VALUE}"
-    aws_cli iam add-role-to-instance-profile --instance-profile-name "$profile" --role-name "$role"
+      --tags "Key=Name,Value=${profile}" "Key=${TAG_KEY},Value=${TAG_VALUE}" \
+      >/dev/null
+    aws_cli iam add-role-to-instance-profile --instance-profile-name "$profile" --role-name "$role" >/dev/null
   else
     attached=$(aws_cli iam get-instance-profile --instance-profile-name "$profile" \
       --query 'InstanceProfile.Roles[0].RoleName' --output text)
     if [[ "$attached" == "None" || -z "$attached" ]]; then
-      aws_cli iam add-role-to-instance-profile --instance-profile-name "$profile" --role-name "$role"
+      aws_cli iam add-role-to-instance-profile --instance-profile-name "$profile" --role-name "$role" >/dev/null
     elif [[ "$attached" != "$role" ]]; then
       die "Instance profile ${profile} is attached to ${attached}, not ${role}."
     fi

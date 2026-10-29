@@ -12,7 +12,7 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - The x86_64 image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`, already launchable in eu-north-1. The script looks up its AMI id at launch. It does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` when this account can already launch it. The script resolves that name in eu-north-1 and does not store an AMI id. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script resolves that name in eu-north-1 from images this account owns and from AWS Marketplace. A subscription does not copy the image into the account. The script does not store an AMI id and does not subscribe. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
