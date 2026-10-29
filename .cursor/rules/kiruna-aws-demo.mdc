@@ -1,0 +1,20 @@
+---
+description: Run the Kiirunavaara AWS demo through the existing scripts. Do not generate a new AWS architecture.
+alwaysApply: true
+---
+
+# Kiirunavaara demo on AWS
+
+The AWS Deployments plugin (`deploy-on-aws`) may be installed. In this repository it is not the deployer.
+
+- Use `awsknowledge` for EC2, Systems Manager, and Marketplace image questions.
+- Use `awspricing` only when someone asks what this host costs. The host is already `m6i.2xlarge`, a 300 GiB gp3 root volume, in `eu-north-1`. Do not change that size from a pricing suggestion.
+- Do not use `awsiac` to generate CDK, CloudFormation, Terraform, Elastic Beanstalk, ECS, or App Runner for this demo. Do not subscribe to a new Marketplace product.
+
+"Deploy to AWS", "start the demo", and "validate the build" mean this sequence, from a local terminal whose AWS CLI is already aimed at the Splunk account. Never ask for access keys, the Splunk admin password, or a license file. Do not write those into the repo, user-data, or a script.
+
+1. `bash scripts/aws/demo-pipeline.sh --admin-cidr CIDR` creates the host if it is missing, or starts it if it is stopped. It then stops. The next person changes the Marketplace admin password and Emil installs the unrestricted 50 GB/day NFR. A missing license is not a script failure.
+2. After that person says the password is changed and the NFR is installed, run `bash scripts/aws/demo-pipeline.sh --after-manual-gate --app-bucket BUCKET`. That packages `lkab_kiruna_demo` from this checkout, installs it over Systems Manager, and runs `scripts/aws/validate-demo.sh`.
+3. The app tree is `lkab_kiruna_demo/` on branch `cursor/kiruna-app-v0.1`. If this checkout has only `scripts/aws/`, stop and say so. Do not invent the app.
+
+`setup-splunk-enterprise.sh` does not install the app. `demo-stop.sh` only stops the instance. Validation that needs Splunk Web (setup save, Shift Brief, scenarios) stays a person in the browser. The scripts do not log in.

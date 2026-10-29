@@ -61,6 +61,24 @@ bash scripts/aws/demo-stop.sh
 
 The same flags work if you prefer them to environment variables. `203.0.113.10/32` is documentation-only; use the CIDR you will actually connect from.
 
+## Desktop Cursor and the AWS Deployments plugin
+
+The AWS Deployments plugin can sit in desktop Cursor. It does not replace these scripts, and it does not open this Cloud agent. A project rule, `.cursor/rules/kiruna-aws-demo.mdc`, tells that desktop agent to ignore the plugin's "generate infrastructure" path (no CDK, CloudFormation, Terraform, Elastic Beanstalk, ECS, or App Runner) and to run this sequence in the local terminal where the AWS CLI is already configured.
+
+```bash
+bash scripts/aws/demo-pipeline.sh --admin-cidr 203.0.113.10/32
+# change the Marketplace admin password, then Emil installs the NFR
+bash scripts/aws/demo-pipeline.sh --after-manual-gate --app-bucket YOUR_BUCKET
+```
+
+The first command creates the host, or starts it if it already exists, and then stops. The second command packages `lkab_kiruna_demo` (from this checkout, or from the already-fetched branch `cursor/kiruna-app-v0.1`), uploads that tarball to a bucket you name, installs it with Systems Manager, deletes the object, and runs `validate-demo.sh`.
+
+`YOUR_BUCKET` must already exist. The script does not create it. The 15-minute download URL is sent only inside the Systems Manager command and is not printed. It is for the app tarball only. Do not use this path for a license file or a password.
+
+`validate-demo.sh` checks the package layout and, on the instance, `splunk version`, the app directory, and the `kiruna_events` stanza. It does not log in. Saving setup, enabling the generator, and reading Shift Brief stay in Splunk Web. AppInspect runs only when `splunk-appinspect` is on PATH. Zero failures is still the packaging exit for that CLI.
+
+`install-demo-app.sh` and `validate-demo.sh` can be run on their own with the same `--profile`, `--region`, `--name`, and `--instance-id` flags. `--local-only` on validate skips the instance.
+
 Re-running setup does not replace an instance that is already there. It will add the current admin CIDR to the security group and leave older CIDRs in place. Changing instance type or volume size means tearing down and running setup again.
 
 ## What is created
@@ -104,7 +122,9 @@ Skripten skapar, startar och stoppar **en** Splunk Enterprise-värd för Kiiruna
 
 Du anger vilket CIDR som får nå port 8000 och 8089. Instansen startar från en Splunk Enterprise-avbildning 10.6.x som kontot redan kan starta, den senaste träffen. Ingen licensfil, inget lösenord, ingen AMI-id och ingen token ligger i repot.
 
-När instansen är uppe gör en person två saker. Först accepterar du Splunks licensvillkor och sätter admin-lösenordet via Session Manager. Sedan lägger Emil själv in NFR-licensen i Splunk Web: obegränsad, 50 GB per dag. Skriptet väntar inte på licensen och avslutas inte med fel om den saknas.
+När instansen är uppe gör en person två saker. Först byter du det initiala admin-lösenordet från Marketplace-avbildningen. Sedan lägger Emil själv in NFR-licensen i Splunk Web: obegränsad, 50 GB per dag. Skriptet väntar inte på licensen och avslutas inte med fel om den saknas.
+
+`demo-pipeline.sh` är ordningen för Cursor på skrivbordet. Första körningen skapar eller startar värden och stannar där. Efter lösenord och NFR installerar `--after-manual-gate` appen `lkab_kiruna_demo` och kör kontrollerna. AWS-pluginet ska inte skriva en ny CDK- eller CloudFormation-stack för den här demon.
 
 `demo-stop.sh` stoppar bara instansen. Disk, säkerhetsgrupp och installationen ligger kvar. `demo-start.sh` startar samma instans. Publik IP kan bytas efter stopp.
 
