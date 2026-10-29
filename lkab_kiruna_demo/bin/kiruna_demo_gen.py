@@ -544,7 +544,16 @@ SCHEME = """<scheme>
   <use_external_validation>false</use_external_validation>
   <use_single_instance>false</use_single_instance>
   <streaming_mode>xml</streaming_mode>
-  <endpoint><args></args></endpoint>
+  <endpoint>
+    <args>
+      <arg name="talk_label">
+        <title>Talk label</title>
+        <description>Optional free-text label for this generator stanza. Not used in events.</description>
+        <required_on_create>false</required_on_create>
+        <required_on_edit>false</required_on_edit>
+      </arg>
+    </args>
+  </endpoint>
 </scheme>"""
 
 
@@ -598,7 +607,9 @@ def run_modular_input():
             live_state = {k: st[k] for k in ("scenario", "scenario_start", "prev_flags", "open_alarms", "last_flags")
                           if st.get(k) is not None}
             bst = {"scenario": "healthy-shift", "scenario_start": want_from, "prev_flags": [], "open_alarms": {}}
-            emit_range(writer, bst, assets, settings, want_from - (want_from % BACKFILL_STEP_S),
+            # History uses wall-clock shifts so daily totals match the illustrative two-shift day plan.
+            history_settings = dict(settings, presentation_shift=False)
+            emit_range(writer, bst, assets, history_settings, want_from - (want_from % BACKFILL_STEP_S),
                        have_from - BACKFILL_STEP_S, BACKFILL_STEP_S)
             for aid_, (obj, code, cause, sev, opened) in sorted(bst["open_alarms"].items()):
                 end = have_from - BACKFILL_STEP_S

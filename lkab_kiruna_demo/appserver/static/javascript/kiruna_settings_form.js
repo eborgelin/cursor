@@ -14,7 +14,9 @@ const APP_NAME = "lkab_kiruna_demo";
 const APP_NAMESPACE = { owner: "nobody", app: APP_NAME, sharing: "app" };
 const SETTINGS_CONF_FILE = "lkab_kiruna_demo_settings";
 const SETTINGS_STANZA = "generator";
-const INPUT_PATH = "data/inputs/kiruna_demo_gen/kiruna_demo";
+// Splunk Web's proxy rejects POSTs to data/inputs/<scheme>/<name>/enable, so the
+// stanza's disabled flag is written through the configurations endpoint instead.
+const INPUT_STANZA = "kiruna_demo_gen://kiruna_demo";
 const SCENARIOS = [
     "healthy-shift",
     "truck-stuck",
@@ -74,7 +76,8 @@ require(["jquery", "splunkjs/splunk", "splunkjs/mvc/simplexml/ready!"], function
                 backfill_days: v.backfill_days,
             });
             stage = (v.generator_enabled ? "Enabling" : "Disabling") + " the generator input";
-            await post(INPUT_PATH + "/" + (v.generator_enabled ? "enable" : "disable"), {});
+            await post("configs/conf-inputs/" + encodeURIComponent(INPUT_STANZA),
+                       { disabled: v.generator_enabled ? "0" : "1" });
             if (mode === "setup") {
                 stage = "Marking setup complete (app.conf [install] is_configured=1)";
                 await setIsConfigured(1);
