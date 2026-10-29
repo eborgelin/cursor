@@ -1,0 +1,14 @@
+---
+description: The Kiirunavaara demo runs on an existing Splunk Cloud stack. Do not launch the retired EC2 host.
+alwaysApply: true
+---
+
+# Kiirunavaara demo on Splunk Cloud
+
+The EC2 host in eu-north-1 was terminated. That AWS plan is retired. Do not run `setup-splunk-enterprise.sh`, `demo-start.sh`, `demo-pipeline.sh`, or `create-app-bucket.sh` to build a new host.
+
+The demo target is the existing Splunk Cloud stack where the operator has `sc_admin`. Confirm Victoria Experience under Support & Services → About. Upload `lkab_kiruna_demo` as a private app. Create the events index `kiruna_events` if the install does not. Enable the modular input on one search head only.
+
+Do not use the AWS Deployments plugin to generate CDK, CloudFormation, Terraform, Elastic Beanstalk, ECS, or App Runner. Do not ask for AWS keys, a Splunk password, or a license file. Do not write those into the repo.
+
+The app tree is `lkab_kiruna_demo/` on branch `cursor/kiruna-app-v0.1`. If this checkout does not contain it, stop and say so. Do not invent the app. Validation that needs Splunk Web stays a person in the browser.
