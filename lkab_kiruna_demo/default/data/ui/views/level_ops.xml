@@ -1,0 +1,390 @@
+<dashboard version="2" theme="dark">
+  <label>Level Operations</label>
+  <description>On this level, is ore moving from drawpoints into the passes?</description>
+  <definition><![CDATA[
+{
+  "title": "Level Operations",
+  "description": "On this level, is ore moving from drawpoints into the passes?",
+  "dataSources": {
+    "ds_level_base": {
+      "type": "ds.search",
+      "name": "Cycles and flows on the level",
+      "options": {
+        "query": "`kiruna_events` (sourcetype=\"kiruna:cycle\" OR sourcetype=\"kiruna:flow\") level_m=$level_m|s$\n| fields _time sourcetype asset_type place_id payload_t object_type object_id inflow_t",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_level_tonnes": {
+      "type": "ds.chain",
+      "name": "Tonnes into passes from this level",
+      "options": {
+        "extend": "ds_level_base",
+        "query": "| where object_type=\"ore_pass\"\n| stats sum(inflow_t) as tonnes\n| eval tonnes=round(coalesce(tonnes, 0))"
+      }
+    },
+    "ds_drawpoint_bar": {
+      "type": "ds.chain",
+      "name": "Tonnes by drawpoint",
+      "options": {
+        "extend": "ds_level_base",
+        "query": "| where sourcetype=\"kiruna:cycle\" AND asset_type=\"lhd\"\n| stats sum(payload_t) as tonnes by place_id\n| sort - tonnes"
+      }
+    },
+    "ds_level_state": {
+      "type": "ds.search",
+      "name": "Asset state on the level (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest where level_m=$level_m|s$\n| stats count(eval(asset_type=\"lhd\" AND state!=\"stopped\" AND state!=\"down\")) as producing count(eval(state=\"stuck\" OR state=\"stopped\" OR state=\"down\")) as stopped\n| eval stopped_band=case(stopped=0, 1, stopped<3, 2, true(), 3)",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_assets": {
+      "type": "ds.search",
+      "name": "Assets on the level, drills included (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest where level_m=$level_m|s$\n| search asset_type IN (\"lhd\", \"truck\", \"drill\", \"crusher\", \"hoist\", \"buffer\")\n| eval _color_rank=case(status=\"Critical\", 1, status=\"Warning\", 2, true(), 3)\n| table asset_id label asset_type state activity place_id status _color_rank",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_passes": {
+      "type": "ds.search",
+      "name": "Ore passes starting on this level (flow lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_flow_latest where object_type=\"ore_pass\" level_m=$level_m|s$\n| eval status=case(status_code=3, \"Critical\", status_code=2, \"Warning\", true(), \"Healthy\"), _color_rank=case(status_code=3, 1, status_code=2, 2, true(), 3)\n| rename object_id as pass_id\n| table pass_id inflow_tpm level_pct plan_tpm status _color_rank",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Level Operations\nOn this level, is ore moving from drawpoints into the passes?  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_kpi_bg": {
+      "type": "splunk.rectangle",
+      "options": {
+        "fillColor": "#1E2128",
+        "strokeColor": "#3D4456",
+        "cornerRadius": 6
+      }
+    },
+    "viz_kpi_dp": {
+      "type": "splunk.singlevalue",
+      "title": "Producing drawpoints",
+      "dataSources": {
+        "primary": "ds_level_state"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"producing\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "underLabel": "LHDs not stopped on this level"
+      }
+    },
+    "viz_kpi_tonnes": {
+      "type": "splunk.singlevalue",
+      "title": "Tonnes into passes",
+      "dataSources": {
+        "primary": "ds_level_tonnes"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"tonnes\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "unit": "t",
+        "unitPosition": "after",
+        "underLabel": "Illustrative, selected time range"
+      }
+    },
+    "viz_kpi_stopped": {
+      "type": "splunk.singlevalue",
+      "title": "Stuck or stopped assets",
+      "dataSources": {
+        "primary": "ds_level_state"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"stopped\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"stopped_band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Green Healthy, amber Warning, red Critical"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      }
+    },
+    "viz_dp_bar": {
+      "type": "splunk.bar",
+      "title": "Tonnes by drawpoint (tappställe), illustrative",
+      "dataSources": {
+        "primary": "ds_drawpoint_bar"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "off",
+        "seriesColors": [
+          "#5C9BD6"
+        ]
+      }
+    },
+    "viz_assets": {
+      "type": "splunk.table",
+      "title": "Assets (click to open Asset Health)",
+      "dataSources": {
+        "primary": "ds_assets"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "lkab_kiruna_demo",
+            "dashboard": "asset_health",
+            "newTab": false,
+            "tokens": {
+              "form.asset_id": "$row.asset_id.value|u$"
+            }
+          }
+        }
+      ]
+    },
+    "viz_passes": {
+      "type": "splunk.table",
+      "title": "Ore passes (störtschakt): inflow t/min and fill percent",
+      "dataSources": {
+        "primary": "ds_passes"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-8h,now"
+      }
+    },
+    "input_level": {
+      "type": "input.dropdown",
+      "title": "Level",
+      "options": {
+        "token": "level_m",
+        "defaultValue": "1220",
+        "items": [
+          {
+            "label": "1220 m demo sublevel",
+            "value": "1220"
+          },
+          {
+            "label": "1288 m demo sublevel",
+            "value": "1288"
+          },
+          {
+            "label": "1365 m demo main level (poster: kommande huvudnivå)",
+            "value": "1365"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp",
+      "input_level"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 1010,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1400,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_kpi_bg",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 110,
+              "w": 1400,
+              "h": 180
+            }
+          },
+          {
+            "item": "viz_kpi_dp",
+            "type": "block",
+            "position": {
+              "x": 30,
+              "y": 120,
+              "w": 455,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_kpi_tonnes",
+            "type": "block",
+            "position": {
+              "x": 495,
+              "y": 120,
+              "w": 455,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_kpi_stopped",
+            "type": "block",
+            "position": {
+              "x": 960,
+              "y": 120,
+              "w": 450,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_dp_bar",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 310,
+              "w": 560,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_passes",
+            "type": "block",
+            "position": {
+              "x": 600,
+              "y": 310,
+              "w": 820,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_assets",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 630,
+              "w": 1400,
+              "h": 360
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Level",
+          "layoutId": "layout_1"
+        }
+      ],
+      "options": {
+        "showTabBar": false
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>

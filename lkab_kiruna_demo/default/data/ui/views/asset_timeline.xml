@@ -1,0 +1,396 @@
+<dashboard version="2" theme="dark">
+  <label>Asset Timeline</label>
+  <description>What did this asset do over the selected time?</description>
+  <definition><![CDATA[
+{
+  "title": "Asset Timeline",
+  "description": "What did this asset do over the selected time?",
+  "dataSources": {
+    "ds_tl_base": {
+      "type": "ds.search",
+      "name": "Asset ticks and alarms",
+      "options": {
+        "query": "`kiruna_events` (sourcetype=\"kiruna:asset\" OR sourcetype=\"kiruna:alarm\") asset_id=$asset_id|s$\n| fields _time sourcetype asset_id state speed_kmh payload_t tick_s scenario level_m alarm_id alarm_code severity action",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_tl_state": {
+      "type": "ds.chain",
+      "name": "State timeline",
+      "options": {
+        "extend": "ds_tl_base",
+        "query": "| where sourcetype=\"kiruna:asset\"\n| eval duration=tick_s*1000\n| table _time asset_id state duration"
+      }
+    },
+    "ds_tl_motion": {
+      "type": "ds.chain",
+      "name": "Speed and payload",
+      "options": {
+        "extend": "ds_tl_base",
+        "query": "| where sourcetype=\"kiruna:asset\"\n| timechart span=10m avg(speed_kmh) as speed_kmh avg(payload_t) as payload_t"
+      }
+    },
+    "ds_tl_alarms": {
+      "type": "ds.chain",
+      "name": "Alarms",
+      "options": {
+        "extend": "ds_tl_base",
+        "query": "| where sourcetype=\"kiruna:alarm\"\n| stats earliest(_time) as opened_t latest(_time) as last_t latest(action) as action by alarm_id asset_id alarm_code severity\n| eval status=if(action=\"open\", \"Open\", \"Closed\"), opened=strftime(opened_t, \"%d %b %H:%M\"), closed=if(action=\"open\", \"\", strftime(last_t, \"%H:%M\"))\n| eval _color_rank=case(status=\"Open\" AND severity=\"critical\", 1, status=\"Open\" AND severity=\"warning\", 2, true(), 3)\n| sort 0 _color_rank -opened_t\n| table asset_id alarm_code severity status opened closed _color_rank"
+      }
+    },
+    "ds_tl_scen": {
+      "type": "ds.chain",
+      "name": "Scenario changes seen by this asset",
+      "options": {
+        "extend": "ds_tl_base",
+        "query": "| where sourcetype=\"kiruna:asset\"\n| sort 0 _time\n| streamstats current=f last(scenario) as prev\n| where isnull(prev) OR scenario!=prev\n| eval started=strftime(_time, \"%d %b %H:%M\")\n| table started scenario level_m\n| eval _color_rank=3"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Asset Timeline\nWhat did this asset do over the selected time?  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_tl": {
+      "type": "splunk.timeline",
+      "title": "State over time",
+      "dataSources": {
+        "primary": "ds_tl_state"
+      },
+      "options": {
+        "category": "> primary | seriesByName('state')",
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "right",
+        "seriesColors": [
+          "#65A637",
+          "#8B90A0",
+          "#F5A623",
+          "#D93F3C",
+          "#5C9BD6"
+        ]
+      }
+    },
+    "viz_motion": {
+      "type": "splunk.line",
+      "title": "Speed (km/h) and payload (t, right axis)",
+      "dataSources": {
+        "primary": "ds_tl_motion"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "speed_kmh": "#5C9BD6",
+          "payload_t": "#F5A623"
+        },
+        "y2Fields": "> primary | frameBySeriesNames('payload_t')",
+        "y2AxisTitleText": "payload t",
+        "yAxisTitleText": "km/h"
+      }
+    },
+    "viz_tl_alarms": {
+      "type": "splunk.table",
+      "title": "Alarms",
+      "dataSources": {
+        "primary": "ds_tl_alarms"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      }
+    },
+    "viz_tl_scen": {
+      "type": "splunk.table",
+      "title": "Scenario changes (click to show this level on Mine Cross-Section)",
+      "dataSources": {
+        "primary": "ds_tl_scen"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "lkab_kiruna_demo",
+            "dashboard": "mine_section",
+            "newTab": false,
+            "tokens": {
+              "form.level_m": "$row.level_m.value|u$"
+            }
+          }
+        }
+      ]
+    },
+    "viz_links": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "[Open Asset Health for this asset](/app/lkab_kiruna_demo/asset_health?form.asset_id=$asset_id|u$)  \n[Open Mine Cross-Section](/app/lkab_kiruna_demo/mine_section)",
+        "fontColor": "#E1E6EB"
+      }
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-24h,now"
+      }
+    },
+    "input_asset": {
+      "type": "input.dropdown",
+      "title": "Asset",
+      "options": {
+        "token": "asset_id",
+        "defaultValue": "KIR-TRK-014",
+        "items": [
+          {
+            "label": "KIR-TRK-014  Driverless truck 014",
+            "value": "KIR-TRK-014"
+          },
+          {
+            "label": "KIR-TRK-021  Driverless truck 021",
+            "value": "KIR-TRK-021"
+          },
+          {
+            "label": "KIR-TRK-027  Driverless truck 027",
+            "value": "KIR-TRK-027"
+          },
+          {
+            "label": "KIR-TRK-033  Driverless truck 033",
+            "value": "KIR-TRK-033"
+          },
+          {
+            "label": "KIR-TRK-040  Development truck 040",
+            "value": "KIR-TRK-040"
+          },
+          {
+            "label": "KIR-LHD-007  Autonomous loader 007",
+            "value": "KIR-LHD-007"
+          },
+          {
+            "label": "KIR-LHD-011  Autonomous loader 011",
+            "value": "KIR-LHD-011"
+          },
+          {
+            "label": "KIR-LHD-018  Autonomous loader 018",
+            "value": "KIR-LHD-018"
+          },
+          {
+            "label": "KIR-LHD-022  Autonomous loader 022",
+            "value": "KIR-LHD-022"
+          },
+          {
+            "label": "KIR-LHD-030  Autonomous loader 030",
+            "value": "KIR-LHD-030"
+          },
+          {
+            "label": "KIR-DRL-003  Fan drill 003",
+            "value": "KIR-DRL-003"
+          },
+          {
+            "label": "KIR-DRL-006  Fan drill 006",
+            "value": "KIR-DRL-006"
+          },
+          {
+            "label": "KIR-CRU-01  Crusher 01 (pass A)",
+            "value": "KIR-CRU-01"
+          },
+          {
+            "label": "KIR-CRU-02  Crusher 02 (pass B and 1288)",
+            "value": "KIR-CRU-02"
+          },
+          {
+            "label": "KIR-HST-01  Main hoist (CA-uppfordring)",
+            "value": "KIR-HST-01"
+          },
+          {
+            "label": "KIR-HST-02  Stage hoist (etage-uppfordring)",
+            "value": "KIR-HST-02"
+          },
+          {
+            "label": "KIR-BUF-01  Buffer pocket 01",
+            "value": "KIR-BUF-01"
+          },
+          {
+            "label": "KIR-BUF-02  Buffer pocket 02",
+            "value": "KIR-BUF-02"
+          },
+          {
+            "label": "KIR-OP-1220-A  Ore pass 1220-A",
+            "value": "KIR-OP-1220-A"
+          },
+          {
+            "label": "KIR-OP-1220-B  Ore pass 1220-B",
+            "value": "KIR-OP-1220-B"
+          },
+          {
+            "label": "KIR-OP-1288-A  Ore pass 1288-A",
+            "value": "KIR-OP-1288-A"
+          },
+          {
+            "label": "KIR-CNV-01  Plant feed conveyor 01",
+            "value": "KIR-CNV-01"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp",
+      "input_asset"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 1010,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1000,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_links",
+            "type": "block",
+            "position": {
+              "x": 1040,
+              "y": 10,
+              "w": 380,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_tl",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 110,
+              "w": 1400,
+              "h": 260
+            }
+          },
+          {
+            "item": "viz_motion",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 390,
+              "w": 1400,
+              "h": 280
+            }
+          },
+          {
+            "item": "viz_tl_alarms",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 690,
+              "w": 860,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_tl_scen",
+            "type": "block",
+            "position": {
+              "x": 900,
+              "y": 690,
+              "w": 520,
+              "h": 300
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Timeline",
+          "layoutId": "layout_1"
+        }
+      ],
+      "options": {
+        "showTabBar": false
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>

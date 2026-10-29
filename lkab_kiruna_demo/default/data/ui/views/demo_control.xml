@@ -1,0 +1,100 @@
+<form version="1.1" theme="dark" script="javascript/kiruna_settings_form.js" stylesheet="styles/kiruna_settings_form.css">
+  <label>Demo Control</label>
+  <description>Which scenario is running, and is the generator alive? Synthetic, illustrative data. The scenario clock is time-compressed: downstream effects arrive over about two minutes.</description>
+  <row>
+    <panel>
+      <title>Generator heartbeat</title>
+      <single>
+        <search>
+          <query>| inputlookup kiruna_asset_latest.csv
+| stats max(last_seen) as last_tick
+| eval age_s=if(isnull(last_tick), 99999, round(now()-last_tick))
+| eval status=case(age_s&lt;=180, "Alive", 1=1, "Stale: generator not writing")
+| eval label=status." (".age_s." s since last tick)"
+| fields label</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="underLabel">Last tick age. Stale means a failed generator, not a failed search.</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Scenario seen in data</title>
+      <single>
+        <search>
+          <query>| inputlookup kiruna_service_scores.csv
+| stats latest(scenario) as scenario</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="underLabel">From the latest summary run</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Summary search</title>
+      <single>
+        <search>
+          <query>| inputlookup kiruna_service_scores.csv
+| stats max(summary_time) as t
+| eval age_s=if(isnull(t), 99999, round(now()-t))
+| eval label=if(age_s&gt;180, "Older than 3 min (".age_s." s)", "Fresh (".age_s." s)")
+| fields label</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+          <refresh>60s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="underLabel">kiruna_refresh_summaries, every minute</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Change scenario</title>
+      <html>
+        <div id="kiruna_settings" class="kiruna-form" data-mode="control">
+          <div class="kiruna-field">
+            <label for="kiruna_scenario">Scenario</label>
+            <select id="kiruna_scenario">
+              <option value="healthy-shift">healthy-shift</option>
+              <option value="truck-stuck">truck-stuck</option>
+              <option value="loader-stopped-drawpoint">loader-stopped-drawpoint</option>
+              <option value="cascade-crusher-hoist">cascade-crusher-hoist</option>
+              <option value="recovery">recovery</option>
+            </select>
+          </div>
+          <div class="kiruna-field">
+            <label><input type="checkbox" id="kiruna_generator_enabled" /> Generator enabled</label>
+          </div>
+          <div class="kiruna-field">
+            <label><input type="checkbox" id="kiruna_presentation_shift" /> Presentation shift</label>
+          </div>
+          <div class="kiruna-field">
+            <label for="kiruna_backfill_days">Backfill days (0 to 14, consumed after one run)</label>
+            <input type="number" id="kiruna_backfill_days" min="0" max="14" step="1" value="0" />
+          </div>
+          <button id="kiruna_save" class="btn btn-primary">Save settings</button>
+          <div class="success kiruna-msg" style="display:none">Saved. The generator reads this on its next tick (up to 60 s).</div>
+          <div class="error kiruna-msg" style="display:none"><ul id="kiruna_errors"></ul></div>
+        </div>
+      </html>
+    </panel>
+    <panel>
+      <title>Scenario talk track</title>
+      <table>
+        <search>
+          <query>| inputlookup kiruna_scenarios.csv
+| table scenario title expected_bands talk_track</query>
+          <earliest>-1m</earliest>
+          <latest>now</latest>
+        </search>
+        <option name="wrap">true</option>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</form>

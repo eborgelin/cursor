@@ -1,0 +1,36 @@
+<dashboard isDashboard="false" script="javascript/kiruna_settings_form.js" stylesheet="styles/kiruna_settings_form.css" hideTitle="true" version="1.1">
+  <label>Set up Kiirunavaara Mine Demo</label>
+  <row>
+    <panel>
+      <html>
+        <div id="kiruna_settings" class="kiruna-form" data-mode="setup">
+          <h2>Kiirunavaara Mine Demo &#8212; setup</h2>
+          <p>Synthetic, unofficial, illustrative data. Not LKAB production data. No secrets are collected here.</p>
+          <div class="kiruna-field">
+            <label for="kiruna_scenario">Scenario</label>
+            <select id="kiruna_scenario">
+              <option value="healthy-shift" selected="selected">healthy-shift</option>
+              <option value="truck-stuck">truck-stuck</option>
+              <option value="loader-stopped-drawpoint">loader-stopped-drawpoint</option>
+              <option value="cascade-crusher-hoist">cascade-crusher-hoist</option>
+              <option value="recovery">recovery</option>
+            </select>
+          </div>
+          <div class="kiruna-field">
+            <label><input type="checkbox" id="kiruna_generator_enabled" checked="checked" /> Generator enabled (writes to index kiruna_events)</label>
+          </div>
+          <div class="kiruna-field">
+            <label><input type="checkbox" id="kiruna_presentation_shift" checked="checked" /> Presentation shift (a shift is always in progress)</label>
+          </div>
+          <div class="kiruna-field">
+            <label for="kiruna_backfill_days">Backfill days (0 to 14)</label>
+            <input type="number" id="kiruna_backfill_days" min="0" max="14" step="1" value="14" />
+          </div>
+          <button id="kiruna_save" class="btn btn-primary">Save and finish setup</button>
+          <div class="success kiruna-msg" style="display:none">Saved. Opening the app.</div>
+          <div class="error kiruna-msg" style="display:none"><ul id="kiruna_errors"></ul></div>
+        </div>
+      </html>
+    </panel>
+  </row>
+</dashboard>

@@ -1,0 +1,345 @@
+<dashboard version="2" theme="dark">
+  <label>Mine Cross-Section</label>
+  <description>Which level is degraded right now?</description>
+  <definition><![CDATA[
+{
+  "title": "Mine Cross-Section",
+  "description": "Which level is degraded right now?",
+  "dataSources": {
+    "ds_heartbeat": {
+      "type": "ds.search",
+      "name": "Generator heartbeat age",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest\n| stats max(last_seen) as t\n| eval age_s=if(isnull(t), 99999, round(now()-t)), band=if(age_s<=180, 3, 1)\n| eval label=if(age_s<=180, \"Alive \".age_s.\" s\", \"Stale \".age_s.\" s\")\n| fields label band",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_levels": {
+      "type": "ds.search",
+      "name": "Level status (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_level_status\n| table svg_region_id status_code level_m status",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_level_assets": {
+      "type": "ds.search",
+      "name": "Assets on the selected level (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest where level_m=$level_m|s$\n| eval _color_rank=case(status=\"Critical\", 1, status=\"Warning\", 2, true(), 3)\n| sort 0 _color_rank asset_id\n| table asset_id label state activity status level_m _color_rank\n| appendpipe [ stats count | where count=0 | eval label=\"No demo equipment on this horizon.\" | fields label ]",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Mine Cross-Section\nWhich level is degraded right now? Click a level band, or pick it in the Level input.  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_heartbeat": {
+      "type": "splunk.singlevalue",
+      "title": "Generator heartbeat",
+      "dataSources": {
+        "primary": "ds_heartbeat"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Since last tick. Stale means the generator stopped."
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 2,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 2,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_section": {
+      "type": "splunk.choropleth.svg",
+      "title": "Kiirunavaara vertical section (schematic)",
+      "dataSources": {
+        "primary": "ds_levels"
+      },
+      "options": {
+        "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 720' width='900' height='720'> <g font-family='Arial, sans-serif' font-size='12' fill='#C3CBD4'> <text x='20' y='18' font-size='13' font-weight='bold'>Kiirunavaara, schematic vertical section (original demo drawing, not to scale)</text> <rect id='surface-plant' x='40' y='30' width='380' height='40' rx='4' fill='#8B90A0' stroke='#3D4456'/> <text x='56' y='55' fill='#1A1C20' font-weight='bold'>Processing plant (malmforadlingsverk)</text> <rect id='surface-rail' x='440' y='30' width='420' height='40' rx='4' fill='#8B90A0' stroke='#3D4456'/> <text x='456' y='55' fill='#1A1C20' font-weight='bold'>Railway to Narvik and Lulea (jarnvag)</text> <line x1='20' y1='96' x2='880' y2='96' stroke='#5C9BD6' stroke-width='1' stroke-dasharray='6 5'/> <text x='600' y='91' fill='#5C9BD6'>Sea level (havsniva), orientation mark only</text> <polygon points='330,104 470,104 690,668 550,668' fill='#3A3F4B' fill-opacity='0.55' stroke='#55607A'/> <text x='470' y='700' fill='#8B90A0'>Orebody, dipping (skivrasbrytning: sublevel caving)</text> <line x1='170' y1='70' x2='170' y2='665' stroke='#C3CBD4' stroke-width='3'/> <text x='22' y='120'>Main hoist</text> <text x='22' y='134'>(CA-uppfordring)</text> <line x1='200' y1='378' x2='200' y2='630' stroke='#C3CBD4' stroke-width='2' stroke-dasharray='4 3'/> <text x='22' y='470'>Stage hoist</text> <text x='22' y='484'>(etage-uppfordring)</text> <rect id='lvl-142' x='230' y='114' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-230' x='230' y='142' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-275' x='230' y='168' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-320' x='230' y='194' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-420' x='230' y='224' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-540' x='230' y='256' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-740' x='230' y='290' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-775' x='230' y='316' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-1045' x='180' y='366' width='590' height='16' fill='#8B90A0'/> <text x='240' y='378' fill='#1A1C20' font-weight='bold'>Main level on the poster (huvudniva)</text> <rect id='lvl-1060' x='230' y='398' width='540' height='10' fill='#8B90A0'/> <text x='590' y='420' fill='#8B90A0'>Exploration drift (undersokningsort)</text> <rect id='lvl-1082' x='230' y='428' width='540' height='10' fill='#8B90A0'/> <rect id='lvl-1220' x='200' y='470' width='570' height='38' rx='3' fill='#65A637'/> <text x='240' y='494' fill='#1A1C20' font-weight='bold'>1220 m demo sublevel: LHD 007, 011, 030; trucks 014, 021</text> <rect id='lvl-1288' x='200' y='538' width='570' height='38' rx='3' fill='#65A637'/> <text x='240' y='562' fill='#1A1C20' font-weight='bold'>1288 m demo sublevel: LHD 018, 022; trucks 027, 033</text> <rect id='lvl-1365' x='160' y='610' width='610' height='44' rx='3' fill='#65A637'/> <text x='240' y='630' fill='#1A1C20' font-weight='bold'>1365 m demo main level: crushers, buffer pockets, main hoist</text> <text x='240' y='646' fill='#1A1C20'>Poster label: kommande huvudniva</text> <line x1='340' y1='508' x2='340' y2='610' stroke='#F2F4F5' stroke-width='2' stroke-dasharray='2 3'/> <line x1='420' y1='508' x2='420' y2='610' stroke='#F2F4F5' stroke-width='2' stroke-dasharray='2 3'/> <line x1='520' y1='576' x2='520' y2='610' stroke='#F2F4F5' stroke-width='2' stroke-dasharray='2 3'/> <text x='346' y='526' font-size='10'>pass 1220-A</text> <text x='426' y='526' font-size='10'>pass 1220-B</text> <text x='526' y='594' font-size='10'>pass 1288-A</text> <g font-size='11'> <text x='782' y='123'>142 m</text> <text x='782' y='151'>230 m</text> <text x='782' y='177'>275 m</text> <text x='782' y='203'>320 m</text> <text x='782' y='233'>420 m</text> <text x='782' y='265'>540 m</text> <text x='782' y='299'>740 m</text> <text x='782' y='325'>775 m</text> <text x='782' y='379'>1045 m</text> <text x='782' y='407'>1060 m</text> <text x='782' y='437'>1082 m</text> <text x='782' y='493'>1220 m</text> <text x='782' y='561'>1288 m</text> <text x='782' y='636'>1365 m</text> </g> </g> </svg>",
+        "backgroundColor": "#1E2128",
+        "areaIds": "> primary | seriesByName(\"svg_region_id\")",
+        "areaValues": "> primary | seriesByName(\"status_code\")",
+        "areaColors": "> areaValues | rangeValue(statusColors)"
+      },
+      "context": {
+        "statusColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "level_m",
+                "key": "row.level_m.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_legend": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "**Legend.** Grey: historic horizon or no demo fleet. Green: **Healthy**. Amber: **Warning**. Red: **Critical**.  \nColors are the latest generator state from the summary lookup. The time range does not filter the map.  \n1045 m is the main level on the teaching poster (huvudnivå). The poster calls 1365 m kommande huvudnivå; this demo treats 1365 m as the active main level. 1220 m and 1288 m are demo sublevels, not poster labels.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_level_assets": {
+      "type": "splunk.table",
+      "title": "Assets on level $level_m$ m (click to open Asset Health)",
+      "dataSources": {
+        "primary": "ds_level_assets"
+      },
+      "options": {
+        "count": 12,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "lkab_kiruna_demo",
+            "dashboard": "asset_health",
+            "newTab": false,
+            "tokens": {
+              "form.asset_id": "$row.asset_id.value|u$"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-8h,now"
+      }
+    },
+    "input_level": {
+      "type": "input.dropdown",
+      "title": "Level",
+      "options": {
+        "token": "level_m",
+        "defaultValue": "1220",
+        "items": [
+          {
+            "label": "142 m",
+            "value": "142"
+          },
+          {
+            "label": "230 m",
+            "value": "230"
+          },
+          {
+            "label": "275 m",
+            "value": "275"
+          },
+          {
+            "label": "320 m",
+            "value": "320"
+          },
+          {
+            "label": "420 m",
+            "value": "420"
+          },
+          {
+            "label": "540 m",
+            "value": "540"
+          },
+          {
+            "label": "740 m",
+            "value": "740"
+          },
+          {
+            "label": "775 m",
+            "value": "775"
+          },
+          {
+            "label": "1045 m main level on the poster (huvudnivå)",
+            "value": "1045"
+          },
+          {
+            "label": "1060 m exploration drift (undersökningsort)",
+            "value": "1060"
+          },
+          {
+            "label": "1082 m",
+            "value": "1082"
+          },
+          {
+            "label": "1220 m demo sublevel",
+            "value": "1220"
+          },
+          {
+            "label": "1288 m demo sublevel",
+            "value": "1288"
+          },
+          {
+            "label": "1365 m demo main level (poster: kommande huvudnivå)",
+            "value": "1365"
+          }
+        ]
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp",
+      "input_level"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 890,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1000,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_heartbeat",
+            "type": "block",
+            "position": {
+              "x": 1040,
+              "y": 10,
+              "w": 380,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_section",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 110,
+              "w": 900,
+              "h": 760
+            }
+          },
+          {
+            "item": "viz_legend",
+            "type": "block",
+            "position": {
+              "x": 940,
+              "y": 110,
+              "w": 480,
+              "h": 190
+            }
+          },
+          {
+            "item": "viz_level_assets",
+            "type": "block",
+            "position": {
+              "x": 940,
+              "y": 310,
+              "w": 480,
+              "h": 560
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Section",
+          "layoutId": "layout_1"
+        }
+      ],
+      "options": {
+        "showTabBar": false
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>

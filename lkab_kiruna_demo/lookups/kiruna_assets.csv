@@ -1,0 +1,23 @@
+asset_id,asset_type,fleet,model,level_m,place_id,pass_id,hero,production,engine_hours_seed,odometer_seed,label
+KIR-TRK-014,truck,Haulage 1220,DEMO-ADT,1220,KIR-DRF-1220-N,KIR-OP-1220-A,1,0,11240,96310,Driverless truck 014
+KIR-TRK-021,truck,Haulage 1220,DEMO-ADT,1220,KIR-DRF-1220-N,KIR-OP-1220-A,0,0,10810,92040,Driverless truck 021
+KIR-TRK-027,truck,Haulage 1288,DEMO-ADT,1288,KIR-DRF-1288-S,KIR-OP-1288-A,0,0,9930,85550,Driverless truck 027
+KIR-TRK-033,truck,Haulage 1288,DEMO-ADT,1288,KIR-DRF-1288-S,KIR-OP-1288-A,0,0,8710,74420,Driverless truck 033
+KIR-TRK-040,truck,Development,DEMO-ADT,1365,KIR-DRF-1365-DEV,,0,0,6120,51200,Development truck 040
+KIR-LHD-007,lhd,LHD 1220,DEMO-LHD,1220,KIR-DP-1220-04,KIR-OP-1220-A,1,1,14420,38810,Autonomous loader 007
+KIR-LHD-011,lhd,LHD 1220,DEMO-LHD,1220,KIR-DP-1220-09,KIR-OP-1220-A,0,1,13870,37150,Autonomous loader 011
+KIR-LHD-018,lhd,LHD 1288,DEMO-LHD,1288,KIR-DP-1288-02,KIR-OP-1288-A,0,1,12950,34460,Autonomous loader 018
+KIR-LHD-022,lhd,LHD 1288,DEMO-LHD,1288,KIR-DP-1288-07,KIR-OP-1288-A,0,1,11330,30920,Autonomous loader 022
+KIR-LHD-030,lhd,LHD 1220,DEMO-LHD,1220,KIR-DP-1220-12,KIR-OP-1220-B,0,1,9870,27010,Autonomous loader 030
+KIR-DRL-003,drill,Drilling,DEMO-DRL,1288,KIR-DRF-1288-S,,0,0,8020,4120,Fan drill 003
+KIR-DRL-006,drill,Drilling,DEMO-DRL,1220,KIR-DRF-1220-N,,0,0,7560,3890,Fan drill 006
+KIR-CRU-01,crusher,Crushing,DEMO-CRU,1365,KIR-CRU-01,KIR-OP-1220-A,0,0,52100,,Crusher 01 (pass A)
+KIR-CRU-02,crusher,Crushing,DEMO-CRU,1365,KIR-CRU-02,KIR-OP-1220-B,0,0,49800,,Crusher 02 (pass B and 1288)
+KIR-HST-01,hoist,Hoisting,DEMO-HST,1365,KIR-HST-01,,0,0,61200,,Main hoist (CA-uppfordring)
+KIR-HST-02,hoist,Hoisting,DEMO-HST,1365,KIR-HST-02,,0,0,58300,,Stage hoist (etage-uppfordring)
+KIR-BUF-01,buffer,Buffers,DEMO-BUF,1365,KIR-BUF-01,,0,0,,,Buffer pocket 01
+KIR-BUF-02,buffer,Buffers,DEMO-BUF,1365,KIR-BUF-02,,0,0,,,Buffer pocket 02
+KIR-OP-1220-A,ore_pass,Ore passes,DEMO-OP,1220,KIR-OP-1220-A,KIR-OP-1220-A,0,0,,,Ore pass 1220-A
+KIR-OP-1220-B,ore_pass,Ore passes,DEMO-OP,1220,KIR-OP-1220-B,KIR-OP-1220-B,0,0,,,Ore pass 1220-B
+KIR-OP-1288-A,ore_pass,Ore passes,DEMO-OP,1288,KIR-OP-1288-A,KIR-OP-1288-A,0,0,,,Ore pass 1288-A
+KIR-CNV-01,conveyor,Plant feed,DEMO-CNV,0,surface-plant,,0,0,40300,,Plant feed conveyor 01

@@ -1,0 +1,12 @@
+place_id,place_type,level_m,pass_id,label
+KIR-DRF-1220-N,drift,1220,KIR-OP-1220-A,Drift 1220 North (single lane)
+KIR-DRF-1288-S,drift,1288,KIR-OP-1288-A,Drift 1288 South (single lane)
+KIR-DRF-1365-DEV,drift,1365,,Development drift 1365
+KIR-DP-1220-04,drawpoint,1220,KIR-OP-1220-A,Drawpoint 1220-04 (tappställe)
+KIR-DP-1220-09,drawpoint,1220,KIR-OP-1220-A,Drawpoint 1220-09 (tappställe)
+KIR-DP-1220-12,drawpoint,1220,KIR-OP-1220-B,Drawpoint 1220-12 (tappställe)
+KIR-DP-1288-02,drawpoint,1288,KIR-OP-1288-A,Drawpoint 1288-02 (tappställe)
+KIR-DP-1288-07,drawpoint,1288,KIR-OP-1288-A,Drawpoint 1288-07 (tappställe)
+KIR-COM-1220,comms_zone,1220,,Comms zone 1220
+KIR-COM-1288,comms_zone,1288,,Comms zone 1288
+KIR-COM-1365,comms_zone,1365,,Comms zone 1365

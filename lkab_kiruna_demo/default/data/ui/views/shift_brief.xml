@@ -1,0 +1,434 @@
+<dashboard version="2" theme="dark">
+  <label>Shift Brief</label>
+  <description>Is this shift making ore, and is anything stuck?</description>
+  <definition><![CDATA[
+{
+  "title": "Shift Brief",
+  "description": "Is this shift making ore, and is anything stuck?",
+  "dataSources": {
+    "ds_heartbeat": {
+      "type": "ds.search",
+      "name": "Generator heartbeat age",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest\n| stats max(last_seen) as t\n| eval age_s=if(isnull(t), 99999, round(now()-t)), band=if(age_s<=180, 3, 1)\n| eval label=if(age_s<=180, \"Alive \".age_s.\" s\", \"Stale \".age_s.\" s\")\n| fields label band",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_shift_kpi": {
+      "type": "ds.search",
+      "name": "Shift tonnes versus illustrative plan (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_flow_latest where object_id=\"KIR-HST-01\"\n| eval elapsed_h=min(8, max(0.01, (now()-shift_start)/3600)), plan_now=round(8000*elapsed_h/8)\n| eval drawn_pct=round(100*shift_drawn_t/plan_now), hoisted_pct=round(100*shift_hoisted_t/plan_now)\n| eval drawn_word=case(drawn_pct>=95, \"Healthy\", drawn_pct>=80, \"Warning\", true(), \"Critical\")\n| eval hoisted_word=case(hoisted_pct>=95, \"Healthy\", hoisted_pct>=80, \"Warning\", true(), \"Critical\")\n| eval drawn_label=tostring(round(shift_drawn_t), \"commas\").\" of \".tostring(plan_now, \"commas\").\" t \".drawn_word\n| eval hoisted_label=tostring(round(shift_hoisted_t), \"commas\").\" of \".tostring(plan_now, \"commas\").\" t \".hoisted_word\n| eval drawn_label=if(producing=0, \"Night idle, no plan\", drawn_label), hoisted_label=if(producing=0, \"Night idle, no plan\", hoisted_label), drawn_pct=if(producing=0, 100, drawn_pct), hoisted_pct=if(producing=0, 100, hoisted_pct)\n| table drawn_label drawn_pct hoisted_label hoisted_pct",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_fleet_kpi": {
+      "type": "ds.search",
+      "name": "Stuck and fleet counts (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest\n| stats count(eval(state=\"stuck\" OR state=\"stopped\")) as stuck count(eval(asset_type=\"truck\")) as trucks count(eval(asset_type=\"truck\" AND (state=\"running\" OR activity=\"waiting_bay\"))) as in_cycle\n| eval stuck_label=if(stuck=0, \"0 Healthy\", stuck.\" \".if(stuck>=3, \"Critical\", \"Warning\"))\n| eval stuck_band=case(stuck=0, 1, stuck<3, 2, true(), 3)\n| eval cycle_label=in_cycle.\" of \".trucks.\" \".if(in_cycle=trucks, \"Healthy\", \"Warning\"), cycle_band=if(in_cycle=trucks, 1, 2)\n| table stuck_label stuck_band cycle_label cycle_band",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_trend": {
+      "type": "ds.search",
+      "name": "Drawn and hoisted tonnes over the shift",
+      "options": {
+        "query": "`kiruna_flow` (object_type=\"ore_pass\" OR object_id=\"KIR-HST-01\")\n| timechart span=5m sum(eval(if(object_type=\"ore_pass\", inflow_t, null()))) as drawn_t sum(eval(if(object_id=\"KIR-HST-01\", hoisted_t, null()))) as hoisted_t",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_alarms": {
+      "type": "ds.search",
+      "name": "Alarms in the shift",
+      "options": {
+        "query": "`kiruna_alarm`\n| stats earliest(_time) as opened_t latest(_time) as last_t latest(action) as action by alarm_id asset_id alarm_code severity\n| eval status=if(action=\"open\", \"Open\", \"Closed\"), opened=strftime(opened_t, \"%d %b %H:%M\"), closed=if(action=\"open\", \"\", strftime(last_t, \"%H:%M\"))\n| eval _color_rank=case(status=\"Open\" AND severity=\"critical\", 1, status=\"Open\" AND severity=\"warning\", 2, true(), 3)\n| sort 0 _color_rank -opened_t\n| table asset_id alarm_code severity status opened closed _color_rank",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Shift Brief\nIs this shift making ore, and is anything stuck?  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_heartbeat": {
+      "type": "splunk.singlevalue",
+      "title": "Generator heartbeat",
+      "dataSources": {
+        "primary": "ds_heartbeat"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Since last tick. Stale means the generator stopped."
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 2,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 2,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_kpi_bg": {
+      "type": "splunk.rectangle",
+      "options": {
+        "fillColor": "#1E2128",
+        "strokeColor": "#3D4456",
+        "cornerRadius": 6
+      }
+    },
+    "viz_kpi_drawn": {
+      "type": "splunk.singlevalue",
+      "title": "Tonnes drawn vs plan to now",
+      "dataSources": {
+        "primary": "ds_shift_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"drawn_label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"drawn_pct\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Illustrative plan 8,000 t per shift"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_kpi_hoisted": {
+      "type": "splunk.singlevalue",
+      "title": "Tonnes hoisted vs plan to now",
+      "dataSources": {
+        "primary": "ds_shift_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"hoisted_label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"hoisted_pct\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Main hoist (CA-uppfordring), illustrative"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_kpi_stuck": {
+      "type": "splunk.singlevalue",
+      "title": "Stuck or stopped assets",
+      "dataSources": {
+        "primary": "ds_fleet_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"stuck_label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"stuck_band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Demo rule from the generator state"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      }
+    },
+    "viz_kpi_cycle": {
+      "type": "splunk.singlevalue",
+      "title": "Trucks in cycle vs fleet",
+      "dataSources": {
+        "primary": "ds_fleet_kpi"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"cycle_label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"cycle_band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Running or waiting in a bay"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      }
+    },
+    "viz_trend": {
+      "type": "splunk.line",
+      "title": "Tonnes per 5 minutes: drawn and hoisted (illustrative)",
+      "dataSources": {
+        "primary": "ds_trend"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "drawn_t": "#5C9BD6",
+          "hoisted_t": "#65A637"
+        },
+        "yAxisTitleText": "t per 5 min"
+      }
+    },
+    "viz_alarms": {
+      "type": "splunk.table",
+      "title": "Alarms (click to open Asset Health)",
+      "dataSources": {
+        "primary": "ds_alarms"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "lkab_kiruna_demo",
+            "dashboard": "asset_health",
+            "newTab": false,
+            "tokens": {
+              "form.asset_id": "$row.asset_id.value|u$"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-8h,now"
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 720,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1000,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_heartbeat",
+            "type": "block",
+            "position": {
+              "x": 1040,
+              "y": 10,
+              "w": 380,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_kpi_bg",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 110,
+              "w": 1400,
+              "h": 180
+            }
+          },
+          {
+            "item": "viz_kpi_drawn",
+            "type": "block",
+            "position": {
+              "x": 30,
+              "y": 120,
+              "w": 335,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_kpi_hoisted",
+            "type": "block",
+            "position": {
+              "x": 375,
+              "y": 120,
+              "w": 335,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_kpi_stuck",
+            "type": "block",
+            "position": {
+              "x": 720,
+              "y": 120,
+              "w": 335,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_kpi_cycle",
+            "type": "block",
+            "position": {
+              "x": 1065,
+              "y": 120,
+              "w": 345,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_trend",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 310,
+              "w": 860,
+              "h": 380
+            }
+          },
+          {
+            "item": "viz_alarms",
+            "type": "block",
+            "position": {
+              "x": 900,
+              "y": 310,
+              "w": 520,
+              "h": 380
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Shift",
+          "layoutId": "layout_1"
+        }
+      ],
+      "options": {
+        "showTabBar": false
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>
