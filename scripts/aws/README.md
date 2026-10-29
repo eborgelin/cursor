@@ -30,7 +30,7 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 | `--ami-id` | `SPLUNK_AMI_ID` | no | latest launchable Splunk Enterprise 10.6.x |
 | `--name` | `SPLUNK_DEMO_NAME` | no | `kiruna-splunk-demo` |
 | `--vpc-id` | `VPC_ID` | no | script creates a VPC |
-| `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | public subnet it creates |
+| `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | subnet the VPN can reach |
 | `--availability-zone` | `AVAILABILITY_ZONE` | no | first available zone |
 | `--instance-type` | `INSTANCE_TYPE` | no | `m6i.2xlarge` |
 | `--volume-size-gb` | `VOLUME_SIZE_GB` | no | `300` |
@@ -78,7 +78,7 @@ aws s3api create-bucket \
 
 The same flags work if you prefer them to environment variables. `203.0.113.10/32` is documentation-only; use the CIDR you will actually connect from.
 
-If `ec2:CreateVpc` is denied by an organization service control policy, pass a public subnet that already exists. Administrator access does not override that deny. The subnet must already route `0.0.0.0/0` to an internet gateway. The script then creates the security group and the instance in that network, and it does not create a VPC, subnet, or internet gateway.
+If `ec2:CreateVpc` is denied, or the account is only reachable through the VPN, pass a subnet the VPN can already reach. `--admin-cidr` is that VPN range, not a public address. The instance is not given a public IP. Administrator access does not override the deny. The script does not create a VPC, subnet, or internet gateway in this case.
 
 ```bash
 bash scripts/aws/setup-splunk-enterprise.sh \
@@ -110,7 +110,7 @@ Re-running setup does not replace an instance that is already there. It will add
 
 ## What is created
 
-- A VPC `10.42.0.0/16`, public subnet `10.42.1.0/24`, internet gateway, and a default route, **or** the VPC and public subnet you passed. A supplied subnet must already route `0.0.0.0/0` to an internet gateway. The script does not change your routes.
+- A VPC `10.42.0.0/16`, public subnet `10.42.1.0/24`, internet gateway, and a default route, **or** the VPC and subnet you passed. A supplied subnet is the VPN path: the instance has no public address, and `--admin-cidr` is the VPN range. The script does not change your routes.
 - A security group: TCP **8000** (Splunk Web) and TCP **8089** (splunkd) from `ADMIN_CIDR` only. No SSH. Port 22 is closed because the plan does not need it. HEC 8088 and forwarder 9997 stay closed; v1 ingest is the local modular input. Egress is TCP 443 and DNS (TCP/UDP 53) only, so the instance can reach Systems Manager. `0.0.0.0/0` is not used as an ingress rule.
 - An instance role with `AmazonSSMManagedInstanceCore`. No static keys on the instance. IMDSv2 is required.
 - One `m6i.2xlarge` instance, unless you override the type. OS timezone is set to `Europe/Stockholm`.

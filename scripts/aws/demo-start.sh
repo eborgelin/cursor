@@ -112,23 +112,29 @@ resolve_instance() {
 }
 
 print_endpoint() {
-  local id=$1 attempt ip
-  ip=""
+  local id=$1 attempt public_ip private_ip
+  private_ip=""
+  public_ip=""
   for ((attempt = 1; attempt <= 10; attempt++)); do
-    ip=$(aws_text ec2 describe-instances --instance-ids "$id" \
+    private_ip=$(aws_text ec2 describe-instances --instance-ids "$id" \
+      --query 'Reservations[0].Instances[0].PrivateIpAddress')
+    public_ip=$(aws_text ec2 describe-instances --instance-ids "$id" \
       --query 'Reservations[0].Instances[0].PublicIpAddress')
-    [[ -n "$ip" ]] && break
+    [[ -n "$private_ip" ]] && break
     sleep 3
   done
-  if [[ -n "$ip" ]]; then
-    printf 'Public IP: %s\n' "$ip"
-    printf 'Splunk Web, once Splunk is started: http://%s:8000\n' "$ip"
-    printf 'Management: https://%s:8089\n' "$ip"
+  if [[ -n "$private_ip" ]]; then
+    printf 'Private IP, from the VPN: %s\n' "$private_ip"
+    printf 'Splunk Web: http://%s:8000\n' "$private_ip"
+    printf 'Management: https://%s:8089\n' "$private_ip"
   else
-    printf 'No public IP yet. Describe the instance in a moment:\n' 
-    printf 'aws ec2 describe-instances --instance-ids %s --region %s --query Reservations[0].Instances[0].PublicIpAddress --output text\n' "$id" "$AWS_REGION"
+    printf 'No private IP yet. Describe the instance in a moment.\n'
   fi
-  printf 'The address can change after a stop.\n'
+  if [[ -n "$public_ip" ]]; then
+    printf 'A public IP is also assigned: %s. The demo is opened from the VPN.\n' "$public_ip"
+  else
+    printf 'No public IP. That matches access through the VPN.\n'
+  fi
   printf 'If boot-start was enabled, Splunk starts with the instance. If not, the host is up and Splunk stays stopped until the first start.\n'
   printf 'No NAT gateway or other dependent resource is started. EBS volumes stay attached.\n'
 }

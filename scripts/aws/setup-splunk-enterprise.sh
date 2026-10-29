@@ -26,7 +26,7 @@ Marketplace subscription). The script does not subscribe to Marketplace,
 does not download an RPM, and does not store an AMI id.
 
 Required:
-  --admin-cidr CIDR          Network allowed to reach Splunk Web (8000) and splunkd (8089)
+  --admin-cidr CIDR          VPN network allowed to reach Splunk Web (8000) and splunkd (8089)
 
 Optional:
   --profile NAME             AWS CLI profile
@@ -35,7 +35,9 @@ Optional:
                              It must be an x86_64 Splunk Enterprise 10.6.x image.
   --name NAME                Resource name (default kiruna-splunk-demo)
   --vpc-id ID                Use this VPC instead of creating one
-  --subnet-id ID             Public subnet in that VPC (required with --vpc-id)
+  --subnet-id ID             Subnet in that VPC (required with --vpc-id).
+                             A supplied subnet is reached over the VPN.
+                             The instance does not get a public address.
   --availability-zone NAME   Used only when this script creates the subnet
   --instance-type TYPE       Default m6i.2xlarge
   --volume-size-gb N         Splunk volume in GiB (default 300). This is the
@@ -200,7 +202,7 @@ validate_args() {
     note "warning: volume is ${VOLUME_SIZE_GB} GiB. The default ${DEFAULT_VOLUME_GB} GiB is the Splunk search-head dedicated-storage floor used for this demo."
   fi
   if [[ -n "$VPC_ID" && -z "$SUBNET_ID" ]]; then
-    die "SUBNET_ID is required when VPC_ID is set. Pass a public subnet, or omit both and let the script create a VPC."
+    die "SUBNET_ID is required when VPC_ID is set. Pass a subnet the VPN can reach, or omit both and let the script create a VPC."
   fi
   if [[ -z "$VPC_ID" && -n "$SUBNET_ID" ]]; then
     die "Pass --vpc-id together with --subnet-id, or omit both."
@@ -442,13 +444,18 @@ launch_enterprise() {
   }
 ]
 EOF
+  if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
+    ASSOCIATE_PUBLIC_IP=true
+  else
+    ASSOCIATE_PUBLIC_IP=false
+  fi
   cat >"${tmp_dir}/nic.json" <<EOF
 [
   {
     "DeviceIndex": 0,
     "SubnetId": "${SUBNET_ID}",
     "Groups": ["${SG_ID}"],
-    "AssociatePublicIpAddress": true,
+    "AssociatePublicIpAddress": ${ASSOCIATE_PUBLIC_IP},
     "DeleteOnTermination": true
   }
 ]
@@ -507,7 +514,7 @@ EOF
       ;;
     *)
       note "Splunk was not confirmed on the image. On the instance, read /var/lib/kiruna-splunk-setup/status."
-      refresh_public_ip "$INSTANCE_ID"
+      refresh_addresses "$INSTANCE_ID"
       print_summary
       print_manual_steps
       exit 1
@@ -805,7 +812,7 @@ require_public_subnet() {
   gw=$(aws_text ec2 describe-route-tables --route-table-ids "$rtb" \
     --query 'RouteTables[0].Routes[?DestinationCidrBlock==`0.0.0.0/0`].GatewayId | [0]')
   if [[ "$gw" != igw-* ]]; then
-    die "Subnet ${subnet_id} has no route to an internet gateway. Splunk Web needs a public address. Pass a public subnet, or omit --vpc-id and let the script create one."
+    die "Subnet ${subnet_id} has no route to an internet gateway. The script-created network needs one. A VPN subnet is passed with --vpc-id and --subnet-id instead."
   fi
 }
 
@@ -817,7 +824,8 @@ ensure_network() {
     [[ -n "$raw" ]] || die "VPC ${VPC_ID} was not found in ${AWS_REGION}."
     subnet_vpc=$(aws_text ec2 describe-subnets --subnet-ids "$SUBNET_ID" --query 'Subnets[0].VpcId')
     [[ "$subnet_vpc" == "$VPC_ID" ]] || die "Subnet ${SUBNET_ID} is not in VPC ${VPC_ID}."
-    require_public_subnet "$SUBNET_ID" "$VPC_ID"
+    USE_PUBLIC_IP=no
+    note "Using subnet ${SUBNET_ID} in ${VPC_ID}. No public address. Reach Splunk from the VPN; --admin-cidr must be that VPN range."
     if [[ -n "$AVAILABILITY_ZONE" ]]; then
       note "Ignoring --availability-zone because --subnet-id was set."
     fi
@@ -853,7 +861,7 @@ ensure_network() {
       cat "$vpc_err" >&2
       if grep -Eq 'UnauthorizedOperation|explicit deny|CreateVpc' "$vpc_err"; then
         rm -f "$vpc_err"
-        die "This identity cannot create a VPC in ${AWS_REGION}. An organization service control policy is denying ec2:CreateVpc. Re-run with --vpc-id and --subnet-id of a public subnet that already exists in ${AWS_REGION}. This script will use that network and will not create a VPC, subnet, or internet gateway."
+        die "This identity cannot create a VPC in ${AWS_REGION}. An organization service control policy is denying ec2:CreateVpc. Re-run with --vpc-id and --subnet-id of a subnet the VPN can already reach. The instance gets no public address. This script will not create a VPC, subnet, or internet gateway."
       fi
       rm -f "$vpc_err"
       die "VPC creation did not return a VPC id."
@@ -861,6 +869,7 @@ ensure_network() {
     rm -f "$vpc_err"
   fi
   OWNED_NETWORK=yes
+  USE_PUBLIC_IP=yes
   [[ -n "$VPC_ID" ]] || die "VPC creation did not return a VPC id."
   # Shorthand, not a JSON blob. A JSON value here makes the AWS CLI drop vpc-id
   # and return MissingParameter vpcId.
@@ -997,6 +1006,17 @@ find_existing_instance() {
   fi
 }
 
+refresh_addresses() {
+  local instance_id=$1
+  PRIVATE_IP=$(aws_text ec2 describe-instances --instance-ids "$instance_id" \
+    --query 'Reservations[0].Instances[0].PrivateIpAddress')
+  if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
+    refresh_public_ip "$instance_id"
+  else
+    PUBLIC_IP=""
+  fi
+}
+
 refresh_public_ip() {
   local instance_id=$1 attempt ip
   PUBLIC_IP=""
@@ -1063,10 +1083,16 @@ report_existing() {
       note "warning: the data volume is ${actual_size} GiB, not ${VOLUME_SIZE_GB}. Tear down and run setup again to change it."
     fi
   fi
+  if [[ "$OWNED_NETWORK" == yes ]]; then
+    USE_PUBLIC_IP=yes
+  else
+    USE_PUBLIC_IP=no
+  fi
   if [[ "$state" == running || "$state" == pending ]]; then
-    refresh_public_ip "$instance_id"
+    refresh_addresses "$instance_id"
   else
     PUBLIC_IP=""
+    PRIVATE_IP=""
   fi
   status=$(read_package_status "$instance_id")
   case "$status" in
@@ -1093,6 +1119,12 @@ report_existing() {
 }
 
 print_summary() {
+  local reach
+  if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
+    reach=public
+  else
+    reach=vpn
+  fi
   cat <<EOF
 
 Demo host
@@ -1100,7 +1132,9 @@ Demo host
   region: ${AWS_REGION}
   instance_id: ${INSTANCE_ID}
   instance_type: ${INSTANCE_TYPE}
-  public_ip: ${PUBLIC_IP:-none yet}
+  private_ip: ${PRIVATE_IP:-none yet}
+  public_ip: ${PUBLIC_IP:-none}
+  reach: ${reach}
   vpc_id: ${VPC_ID:-unknown}
   subnet_id: ${SUBNET_ID:-unknown}
   security_group_id: ${SG_ID:-unknown}
@@ -1146,17 +1180,20 @@ except when the image does not contain Splunk.
 The 50 GB/day figure is that NFR entitlement. It is not a measured ingest total.
 Do not publish an unmeasured megabyte claim for the generator.
 
+EOF
+  if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
+    cat <<EOF
 Splunk Web, after the first start: http://${PUBLIC_IP:-PUBLIC_IP}:8000
 Management: https://${PUBLIC_IP:-PUBLIC_IP}:8089
 SSH is not open. The plan does not need it.
 EOF
-  if [[ -z "${PUBLIC_IP:-}" ]]; then
+  else
     cat <<EOF
-
-No public IP is assigned right now. If the instance is stopped, start it with
-scripts/aws/demo-start.sh. The address can change after a stop. Then:
-
-aws ec2 describe-instances --instance-ids ${INSTANCE_ID}${suffix} --query 'Reservations[0].Instances[0].PublicIpAddress' --output text
+Open Splunk from the VPN, not from the public internet.
+Splunk Web: http://${PRIVATE_IP:-PRIVATE_IP}:8000
+Management: https://${PRIVATE_IP:-PRIVATE_IP}:8089
+--admin-cidr is the VPN range allowed to reach those ports.
+SSH is not open. The plan does not need it. This instance has no public address.
 EOF
   fi
 }
@@ -1192,7 +1229,7 @@ main() {
   ensure_security_group
   ensure_role
   launch_enterprise
-  refresh_public_ip "$INSTANCE_ID"
+  refresh_addresses "$INSTANCE_ID"
   print_summary
   print_manual_steps
 }
@@ -1201,6 +1238,9 @@ IDS=()
 INSTANCE_ID=""
 EXISTING_INSTANCE_ID=""
 PUBLIC_IP=""
+PRIVATE_IP=""
+USE_PUBLIC_IP=""
+ASSOCIATE_PUBLIC_IP=false
 DATA_VOLUME_ID=""
 SG_ID=""
 OWNED_NETWORK=""
