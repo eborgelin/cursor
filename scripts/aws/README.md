@@ -9,10 +9,10 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - A Splunk AWS account. The script prints `aws sts get-caller-identity` and does not check a specific account number. Point the CLI at that account yourself.
 - AWS CLI v2, non-interactive (`AWS_PAGER` is cleared by the scripts).
 - Permission to create the EC2 and IAM objects below, and `ssm:SendCommand` plus `ssm:GetCommandInvocation` if you want the script to confirm Splunk is on the image. Session Manager is used from this same local terminal.
-- A Splunk Enterprise 10.6.x x86_64 image this account can already launch in eu-north-1. The script selects the latest match. It does not subscribe to Marketplace and it does not download an RPM.
+- The x86_64 image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`, already launchable in eu-north-1. The script looks up its AMI id at launch. It does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots a Splunk Enterprise image that is already launchable in this account, version 10.6.x, the latest match. AWS Marketplace currently lists 10.6.1.1 as the latest Splunk Enterprise AMI. The script resolves the image in eu-north-1 at launch and does not store an AMI id. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` when this account can already launch it. The script resolves that name in eu-north-1 and does not store an AMI id. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
@@ -27,7 +27,8 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 | `--region` | `AWS_REGION` or `AWS_DEFAULT_REGION` | no | `eu-north-1` only |
 | `--profile` | `AWS_PROFILE` | no | ambient credentials |
 | `--admin-cidr` | `ADMIN_CIDR` | yes | |
-| `--ami-id` | `SPLUNK_AMI_ID` | no | latest launchable Splunk Enterprise 10.6.x |
+| `--ami-name` | `SPLUNK_AMI_NAME` | no | `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` |
+| `--ami-id` | `SPLUNK_AMI_ID` | no | lookup of that name |
 | `--name` | `SPLUNK_DEMO_NAME` | no | `kiruna-splunk-demo` |
 | `--vpc-id` | `VPC_ID` | no | script creates a VPC |
 | `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | subnet the VPN can reach |
@@ -114,7 +115,7 @@ Re-running setup does not replace an instance that is already there. It will add
 - A security group: TCP **8000** (Splunk Web) and TCP **8089** (splunkd) from `ADMIN_CIDR` only. No SSH. Port 22 is closed because the plan does not need it. HEC 8088 and forwarder 9997 stay closed; v1 ingest is the local modular input. Egress is TCP 443 and DNS (TCP/UDP 53) only, so the instance can reach Systems Manager. `0.0.0.0/0` is not used as an ingress rule.
 - An instance role with `AmazonSSMManagedInstanceCore`. No static keys on the instance. IMDSv2 is required.
 - One `m6i.2xlarge` instance, unless you override the type. OS timezone is set to `Europe/Stockholm`.
-- The latest Splunk Enterprise 10.6.x x86_64 image this account can already launch. The script does not subscribe to Marketplace.
+- The named Splunk 10.6.1.1 x86_64 image, if this account can already launch it. The script does not subscribe to Marketplace.
 - One encrypted 300 GiB gp3 volume, the AMI root, tagged `kiruna-volume=splunk-data` and kept if the instance is stopped or terminated. No Elastic IP and no NAT gateway, so a stop releases the public address and does not leave a NAT charge. The volume still bills while stopped.
 - Splunk is already on the image and starts with the instance. This script does not set the admin password.
 
@@ -147,7 +148,7 @@ The VPC, subnet, internet route, and the security group rules for 8000 and 8089 
 
 Skripten skapar, startar och stoppar **en** Splunk Enterprise-värd för Kiirunavaara-demon. Kör dem från en lokal terminal med AWS CLI. Regionen är eu-north-1. Skripten ställer inga frågor.
 
-Du anger vilket CIDR som får nå port 8000 och 8089. Instansen startar från en Splunk Enterprise-avbildning 10.6.x som kontot redan kan starta, den senaste träffen. Ingen licensfil, inget lösenord, ingen AMI-id och ingen token ligger i repot.
+Du anger vilket CIDR som får nå port 8000 och 8089. Instansen startar från avbildningen `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` om kontot redan kan starta den. Ingen licensfil, inget lösenord, ingen AMI-id och ingen token ligger i repot.
 
 När instansen är uppe gör en person två saker. Först byter du det initiala admin-lösenordet från Marketplace-avbildningen. Sedan lägger Emil själv in NFR-licensen i Splunk Web: obegränsad, 50 GB per dag. Skriptet väntar inte på licensen och avslutas inte med fel om den saknas.
 

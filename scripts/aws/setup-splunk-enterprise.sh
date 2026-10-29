@@ -11,6 +11,7 @@ readonly DEFAULT_NAME=kiruna-splunk-demo
 readonly DEFAULT_INSTANCE_TYPE=m6i.2xlarge
 readonly DEFAULT_VOLUME_GB=300
 readonly DEFAULT_REGION=eu-north-1
+readonly DEFAULT_AMI_NAME=splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
 
 usage() {
   cat <<'EOF'
@@ -20,10 +21,11 @@ Run this from a local terminal where the AWS CLI is installed and pointed at
 the Splunk AWS account. The region is eu-north-1. Pass --profile or
 AWS_PROFILE when the default CLI identity is not that account.
 
-The instance boots the latest Splunk Enterprise 10.6.x x86_64 image this
-account can already launch in eu-north-1 (owned, shared, or an existing
-Marketplace subscription). The script does not subscribe to Marketplace,
-does not download an RPM, and does not store an AMI id.
+The instance boots the x86_64 image named
+splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
+when this account can already launch it in eu-north-1. The script looks up
+the AMI id at launch and does not store one. It does not subscribe to
+Marketplace and does not download an RPM.
 
 Required:
   --admin-cidr CIDR          VPN network allowed to reach Splunk Web (8000) and splunkd (8089)
@@ -31,7 +33,8 @@ Required:
 Optional:
   --profile NAME             AWS CLI profile
   --region REGION            Must be eu-north-1. That is the default.
-  --ami-id AMI               Use this image instead of the latest 10.6.x lookup.
+  --ami-name NAME            Image name to launch. Default is the 10.6.1.1 name above.
+  --ami-id AMI               Use this AMI id instead of the named image.
                              It must be an x86_64 Splunk Enterprise 10.6.x image.
   --name NAME                Resource name (default kiruna-splunk-demo)
   --vpc-id ID                Use this VPC instead of creating one
@@ -44,7 +47,7 @@ Optional:
                              AMI root volume, because Splunk is already on the image.
 
 Environment variables match the flags: AWS_PROFILE, AWS_REGION (or
-AWS_DEFAULT_REGION), ADMIN_CIDR, SPLUNK_AMI_ID, SPLUNK_DEMO_NAME, VPC_ID,
+AWS_DEFAULT_REGION), ADMIN_CIDR, SPLUNK_AMI_NAME, SPLUNK_AMI_ID, SPLUNK_DEMO_NAME, VPC_ID,
 SUBNET_ID, AVAILABILITY_ZONE, INSTANCE_TYPE, VOLUME_SIZE_GB.
 
 The script does not prompt. It exits 0 when the instance exists or the image
@@ -66,6 +69,7 @@ PROFILE=${AWS_PROFILE:-}
 AWS_REGION=${AWS_REGION:-${AWS_DEFAULT_REGION:-$DEFAULT_REGION}}
 ADMIN_CIDR=${ADMIN_CIDR:-}
 AMI_ID=${SPLUNK_AMI_ID:-}
+AMI_NAME=${SPLUNK_AMI_NAME:-$DEFAULT_AMI_NAME}
 NAME=${SPLUNK_DEMO_NAME:-$DEFAULT_NAME}
 VPC_ID=${VPC_ID:-}
 SUBNET_ID=${SUBNET_ID:-}
@@ -113,6 +117,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ami-id=*)
       AMI_ID=${1#*=}
+      shift
+      ;;
+    --ami-name)
+      [[ $# -ge 2 ]] || die "--ami-name needs a value"
+      AMI_NAME=$2
+      shift 2
+      ;;
+    --ami-name=*)
+      AMI_NAME=${1#*=}
       shift
       ;;
     --name)
@@ -217,8 +230,10 @@ validate_args() {
     die "AWS profile name must not contain spaces."
   fi
   if [[ -n "$AMI_ID" && ! "$AMI_ID" =~ ^ami-[0-9a-f]+$ ]]; then
-    die "--ami-id must look like ami-0abc. Leave it unset to use the latest launchable Splunk Enterprise 10.6.x image."
+    die "--ami-id must look like ami-0abc. Leave it unset to launch ${DEFAULT_AMI_NAME}."
   fi
+  [[ -n "$AMI_NAME" ]] || die "AMI name is empty. Leave --ami-name unset to launch ${DEFAULT_AMI_NAME}."
+  [[ "$AMI_NAME" != *[[:space:]]* ]] || die "AMI name must not contain spaces."
 }
 
 export AWS_PAGER=""
@@ -293,8 +308,8 @@ EOF
 
 # =============================================================================
 # BEGIN INSTANCE_SOURCE
-# Boot the latest Splunk Enterprise 10.6.x image this account can already
-# launch in eu-north-1. A later Splunk Show image replaces this block only.
+# Boot the named Splunk 10.6.1.1 image this account can already launch in
+# eu-north-1. A later Splunk Show image replaces this block only.
 # Do not add a license file, an admin password, a download URL, or an AMI id.
 # Leave the VPC, subnet, route, and security group sections outside this block.
 # =============================================================================
@@ -369,6 +384,54 @@ load_image_catalog() {
     --output text
 }
 
+resolve_named_ami() {
+  local want=$1 raw id created name arch best_created best_id best_name best_arch lower ver
+  best_created=""
+  best_id=""
+  best_name=""
+  best_arch=""
+  raw=$(aws_cli ec2 describe-images \
+    --executable-users self \
+    --filters "Name=name,Values=${want}" Name=state,Values=available \
+    --query 'Images[].[ImageId,CreationDate,Name,Architecture]' \
+    --output text)
+  if [[ -z "${raw//[[:space:]]/}" ]]; then
+    raw=$(aws_cli ec2 describe-images \
+      --owners self \
+      --filters "Name=name,Values=${want}" Name=state,Values=available \
+      --query 'Images[].[ImageId,CreationDate,Name,Architecture]' \
+      --output text)
+  fi
+  [[ -n "${raw//[[:space:]]/}" ]] || die "No launchable image named ${want} in ${AWS_REGION}. This account must already be able to launch it. The script does not subscribe to Marketplace and does not store an AMI id."
+  while IFS=$'\t' read -r id created name arch; do
+    [[ "$id" == ami-* ]] || continue
+    if [[ -z "$best_created" || "$created" > "$best_created" ]]; then
+      best_created=$created
+      best_id=$id
+      best_name=$name
+      best_arch=$arch
+    fi
+  done <<< "$raw"
+  [[ -n "$best_id" ]] || die "Image name ${want} did not resolve to an AMI id in ${AWS_REGION}."
+  [[ "$best_arch" == x86_64 ]] || die "Image ${best_name} is ${best_arch}. This demo uses the x86_64 Splunk image."
+  lower=$(printf '%s' "$best_name" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+    *forwarder*|*itsi*|*soar*|*phantom*|*splunkcloud*)
+      die "Image ${best_name} is not the Splunk Enterprise 10.6.1.1 demo image."
+      ;;
+  esac
+  if [[ "$best_name" =~ 10\.6\.[0-9]+(\.[0-9]+)? ]]; then
+    ver=${BASH_REMATCH[0]}
+  else
+    die "Image ${best_name} does not contain a 10.6.x version."
+  fi
+  RESOLVED_AMI=$best_id
+  RESOLVED_AMI_NAME=$best_name
+  RESOLVED_AMI_VERSION=$ver
+  note "Splunk image ${RESOLVED_AMI} ${RESOLVED_AMI_NAME} (${RESOLVED_AMI_VERSION})"
+}
+
+# Earlier lookup of whichever 10.6 image sorted newest. Launch uses resolve_named_ami.
 resolve_latest_ami() {
   local raw id created name desc
   BEST_KEY=""
@@ -422,7 +485,7 @@ launch_enterprise() {
   if [[ -n "$AMI_ID" ]]; then
     accept_explicit_ami "$AMI_ID"
   else
-    resolve_latest_ami
+    resolve_named_ami "$AMI_NAME"
   fi
   read_root_device "$RESOLVED_AMI"
   write_user_data "${tmp_dir}/user-data.sh"
