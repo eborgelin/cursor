@@ -1,6 +1,8 @@
 # Kiirunavaara demo — one Splunk Enterprise host on AWS
 
-English runbook for a single combined indexer and search head. A short Swedish summary is at the end.
+This host plan is retired. The instance was terminated from the AWS console. The demo continues on an existing Splunk Cloud stack with `sc_admin`. Do not launch another EC2 host from these scripts.
+
+English runbook for the retired host. A short Swedish summary is at the end.
 
 This is a demo host for the Kiirunavaara presentation. It does not install the demo app, ITSI, or Splunk Show. It does not contain an account id, access key, password, token, or license file.
 
