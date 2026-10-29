@@ -1,0 +1,389 @@
+<dashboard version="2" theme="dark">
+  <label>Stuck and Recovery</label>
+  <description>What is stuck, and what is downstream?</description>
+  <definition><![CDATA[
+{
+  "title": "Stuck and Recovery",
+  "description": "What is stuck, and what is downstream?",
+  "dataSources": {
+    "ds_heroes": {
+      "type": "ds.search",
+      "name": "Hero assets (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest where asset_id=\"KIR-TRK-014\" OR asset_id=\"KIR-LHD-007\"\n| eval label=asset_id.\" \".state.\" \".status\n| eval band=status_code\n| table asset_id label band",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_hero_014": {
+      "type": "ds.chain",
+      "name": "KIR-TRK-014",
+      "options": {
+        "extend": "ds_heroes",
+        "query": "| where asset_id=\"KIR-TRK-014\""
+      }
+    },
+    "ds_hero_007": {
+      "type": "ds.chain",
+      "name": "KIR-LHD-007",
+      "options": {
+        "extend": "ds_heroes",
+        "query": "| where asset_id=\"KIR-LHD-007\""
+      }
+    },
+    "ds_stuck": {
+      "type": "ds.search",
+      "name": "Assets stuck or stopped (summary lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_asset_latest where state=\"stuck\" OR state=\"stopped\" OR state=\"down\"\n| eval _color_rank=case(status=\"Critical\", 1, status=\"Warning\", 2, true(), 3)\n| table asset_id label state cause place_id status _color_rank\n| appendpipe [ stats count | where count=0 | eval label=\"Nothing stuck or stopped.\" | fields label ]",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_chain_line": {
+      "type": "ds.search",
+      "name": "Pass A inflow, CRU-01 feed, buffer minutes, hoist t/h",
+      "options": {
+        "query": "`kiruna_flow` (object_id=\"KIR-OP-1220-A\" OR object_id=\"KIR-CRU-01\" OR object_id=\"KIR-BUF-01\" OR object_id=\"KIR-HST-01\")\n| eval pass_a_inflow_tph=if(object_id=\"KIR-OP-1220-A\", inflow_tpm*60, null()), cru01_feed_tph=if(object_id=\"KIR-CRU-01\", feed_tpm*60, null()), buffer_min=if(object_id=\"KIR-BUF-01\", buffer_min, null()), hoist_tph=if(object_id=\"KIR-HST-01\", hoist_tpm*60, null())\n| timechart span=1m avg(pass_a_inflow_tph) as pass_a_inflow_tph avg(cru01_feed_tph) as cru01_feed_tph avg(buffer_min) as buffer_min avg(hoist_tph) as hoist_tph",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_talk": {
+      "type": "ds.search",
+      "name": "Talk track for the running scenario (scenario lookup)",
+      "options": {
+        "query": "| inputlookup kiruna_service_scores\n| stats first(scenario) as scenario\n| lookup kiruna_scenarios scenario OUTPUT title expected_bands talk_track\n| eval _color_rank=3\n| table scenario title expected_bands talk_track _color_rank",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Stuck and Recovery\nWhat is stuck, and what is downstream?  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_kpi_bg": {
+      "type": "splunk.rectangle",
+      "options": {
+        "fillColor": "#1E2128",
+        "strokeColor": "#3D4456",
+        "cornerRadius": 6
+      }
+    },
+    "viz_014": {
+      "type": "splunk.singlevalue",
+      "title": "Driverless truck KIR-TRK-014",
+      "dataSources": {
+        "primary": "ds_hero_014"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Drift KIR-DRF-1220-N"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      }
+    },
+    "viz_007": {
+      "type": "splunk.singlevalue",
+      "title": "Autonomous loader KIR-LHD-007",
+      "dataSources": {
+        "primary": "ds_hero_007"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"band\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Drawpoint KIR-DP-1220-04, pass KIR-OP-1220-A"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 0.5,
+            "value": "#8B90A0"
+          },
+          {
+            "from": 0.5,
+            "to": 1.5,
+            "value": "#65A637"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#F5A623"
+          },
+          {
+            "from": 2.5,
+            "value": "#D93F3C"
+          }
+        ]
+      }
+    },
+    "viz_stuck": {
+      "type": "splunk.table",
+      "title": "Stuck or stopped now (click to open Asset Health)",
+      "dataSources": {
+        "primary": "ds_stuck"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.linkToDashboard",
+          "options": {
+            "app": "lkab_kiruna_demo",
+            "dashboard": "asset_health",
+            "newTab": false,
+            "tokens": {
+              "form.asset_id": "$row.asset_id.value|u$"
+            }
+          }
+        }
+      ]
+    },
+    "viz_chain": {
+      "type": "splunk.line",
+      "title": "Downstream: pass A inflow t/h, CRU-01 feed t/h, hoist t/h, buffer minutes (right axis)",
+      "dataSources": {
+        "primary": "ds_chain_line"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "pass_a_inflow_tph": "#5C9BD6",
+          "cru01_feed_tph": "#F5A623",
+          "buffer_min": "#A57BD6",
+          "hoist_tph": "#65A637"
+        },
+        "y2Fields": "> primary | frameBySeriesNames('buffer_min')",
+        "y2AxisTitleText": "buffer min",
+        "nullValueDisplay": "connect"
+      }
+    },
+    "viz_talk": {
+      "type": "splunk.table",
+      "title": "Talk track",
+      "dataSources": {
+        "primary": "ds_talk"
+      },
+      "options": {
+        "count": 1,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      }
+    },
+    "viz_links": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "[Open Demo Control](/app/lkab_kiruna_demo/demo_control) to change the scenario.  \n[Open Service Health](/app/lkab_kiruna_demo/service_health)",
+        "fontColor": "#E1E6EB"
+      }
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-1h,now"
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 840,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1000,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_links",
+            "type": "block",
+            "position": {
+              "x": 1040,
+              "y": 10,
+              "w": 380,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_kpi_bg",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 110,
+              "w": 1400,
+              "h": 180
+            }
+          },
+          {
+            "item": "viz_014",
+            "type": "block",
+            "position": {
+              "x": 30,
+              "y": 120,
+              "w": 685,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_007",
+            "type": "block",
+            "position": {
+              "x": 725,
+              "y": 120,
+              "w": 685,
+              "h": 160
+            }
+          },
+          {
+            "item": "viz_stuck",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 310,
+              "w": 560,
+              "h": 340
+            }
+          },
+          {
+            "item": "viz_chain",
+            "type": "block",
+            "position": {
+              "x": 600,
+              "y": 310,
+              "w": 820,
+              "h": 340
+            }
+          },
+          {
+            "item": "viz_talk",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 670,
+              "w": 1400,
+              "h": 150
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Stuck",
+          "layoutId": "layout_1"
+        }
+      ],
+      "options": {
+        "showTabBar": false
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>

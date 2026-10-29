@@ -1,0 +1,664 @@
+<dashboard version="2" theme="dark">
+  <label>Outbound Overview</label>
+  <description>Are illustrative tonnes on plan from the mine to the ports?</description>
+  <definition><![CDATA[
+{
+  "title": "Outbound Overview",
+  "description": "Are illustrative tonnes on plan from the mine to the ports?",
+  "dataSources": {
+    "ds_today": {
+      "type": "ds.search",
+      "name": "Today drawn, crushed, hoisted versus day plan",
+      "options": {
+        "query": "`kiruna_flow` (object_type=\"ore_pass\" OR object_type=\"crusher\" OR object_id=\"KIR-HST-01\") earliest=@d latest=now\n| stats sum(eval(if(object_type=\"ore_pass\", inflow_t, 0))) as drawn sum(crushed_t) as crushed sum(eval(if(object_id=\"KIR-HST-01\", hoisted_t, 0))) as hoisted sum(eval(if(object_type=\"ore_pass\", plan_tpm*tick_s/60, 0))) as plan_now\n| eval drawn_pct=round(100*drawn/plan_now), crushed_pct=round(100*crushed/plan_now), hoisted_pct=round(100*hoisted/plan_now)",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_daily": {
+      "type": "ds.search",
+      "name": "Daily summary lookup (written by kiruna_daily_rollup)",
+      "options": {
+        "query": "| inputlookup kiruna_daily_summary\n| eval _time=day_epoch\n| sort 0 _time"
+      }
+    },
+    "ds_ytd": {
+      "type": "ds.chain",
+      "name": "Year to date versus illustrative plan",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where strftime(_time, \"%Y\")=strftime(now(), \"%Y\")\n| eval ytd_pct=round(100*ytd_hoisted_t/ytd_plan_t, 1)\n| eval ytd_label=tostring(round(ytd_hoisted_t/1000000, 2)).\" Mt hoisted, \".ytd_pct.\" pct of plan\"\n| table _time ytd_label ytd_pct hoisted_t"
+      }
+    },
+    "ds_movement": {
+      "type": "ds.chain",
+      "name": "Last 14 days drawn, hoisted, railed",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where _time>=relative_time(now(), \"-14d@d\")\n| table _time drawn_t hoisted_t railed_t day_plan_t"
+      }
+    },
+    "ds_quality": {
+      "type": "ds.chain",
+      "name": "Fe grade versus target",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where _time>=relative_time(now(), \"-14d@d\")\n| eval fe_target=67\n| table _time fe_pct fe_target"
+      }
+    },
+    "ds_ceiling": {
+      "type": "ds.chain",
+      "name": "Days outside SiO2 or P ceiling",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where _time>=relative_time(now(), \"-14d@d\")\n| eval outside=if(sio2_over=1 OR p_over=1, 1, 0)\n| table _time outside"
+      }
+    },
+    "ds_logistics": {
+      "type": "ds.chain",
+      "name": "Rail tonnes toward Narvik and Luleå versus plan split",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where _time>=relative_time(now(), \"-14d@d\")\n| stats sum(narvik_t) as narvik sum(lulea_t) as lulea sum(railed_t) as railed\n| eval narvik_plan=round(railed*0.7), lulea_plan=round(railed*0.3)\n| eval destination=mvappend(\"Narvik\", \"Luleå\")\n| mvexpand destination\n| eval shipped_t=if(destination=\"Narvik\", narvik, lulea), plan_t=if(destination=\"Narvik\", narvik_plan, lulea_plan)\n| table destination shipped_t plan_t"
+      }
+    },
+    "ds_shipped": {
+      "type": "ds.chain",
+      "name": "Shipped versus plan and departures on plan",
+      "options": {
+        "extend": "ds_daily",
+        "query": "| where _time>=relative_time(now(), \"-14d@d\")\n| stats sum(railed_t) as railed sum(day_plan_t) as plan sum(departures_on_plan) as onp sum(departures) as dep\n| eval shipped_pct=round(100*railed/plan), on_plan_pct=round(100*onp/dep)"
+      }
+    },
+    "ds_inventory": {
+      "type": "ds.search",
+      "name": "Inventory by node, latest hour",
+      "options": {
+        "query": "`kiruna_supply` record=\"inventory\" earliest=-2h\n| stats latest(tonnes) as tonnes latest(node_order) as node_order by node_id\n| lookup kiruna_supply_nodes node_id OUTPUT label\n| sort node_order\n| eval _color_rank=3\n| table label tonnes _color_rank",
+        "refresh": "60s",
+        "refreshType": "delay"
+      }
+    },
+    "ds_inventory_bar": {
+      "type": "ds.chain",
+      "name": "Inventory bar",
+      "options": {
+        "extend": "ds_inventory",
+        "query": "| fields label tonnes"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_header": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "## Outbound Overview\nAre illustrative tonnes on plan from the mine to the ports? Tonnes only.  \nSynthetic, illustrative demo data. Scenario clock is time-compressed. Not LKAB production data.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_today_note": {
+      "type": "splunk.markdown",
+      "options": {
+        "markdown": "Every figure on this view is a demo fixture. **Illustrative targets.** Day plan 16,000 t.",
+        "fontColor": "#E1E6EB"
+      }
+    },
+    "viz_r_drawn": {
+      "type": "splunk.singlevalueradial",
+      "title": "Drawn today vs plan to now",
+      "dataSources": {
+        "primary": "ds_today"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"drawn_pct\") | lastPoint()",
+        "maxValue": 120,
+        "underLabel": "pct, illustrative",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> majorValue | rangeValue(pctColors)",
+        "radialStrokeColor": "> majorValue | rangeValue(pctColors)"
+      },
+      "context": {
+        "pctColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_r_crushed": {
+      "type": "splunk.singlevalueradial",
+      "title": "Crushed today vs plan to now",
+      "dataSources": {
+        "primary": "ds_today"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"crushed_pct\") | lastPoint()",
+        "maxValue": 120,
+        "underLabel": "pct, illustrative",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> majorValue | rangeValue(pctColors)",
+        "radialStrokeColor": "> majorValue | rangeValue(pctColors)"
+      },
+      "context": {
+        "pctColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_r_hoisted": {
+      "type": "splunk.singlevalueradial",
+      "title": "Hoisted today vs plan to now",
+      "dataSources": {
+        "primary": "ds_today"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"hoisted_pct\") | lastPoint()",
+        "maxValue": 120,
+        "underLabel": "pct, illustrative",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> majorValue | rangeValue(pctColors)",
+        "radialStrokeColor": "> majorValue | rangeValue(pctColors)"
+      },
+      "context": {
+        "pctColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_ytd": {
+      "type": "splunk.singlevalue",
+      "title": "Year to date hoisted vs illustrative plan",
+      "dataSources": {
+        "primary": "ds_ytd"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"ytd_label\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"ytd_pct\") | lastPoint() | rangeValue(bandColors)",
+        "underLabel": "Daily lookup; days before the backfill window are seeded fixtures",
+        "sparklineValues": "> primary | seriesByName(\"hoisted_t\")",
+        "sparklineDisplay": "below"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_movement": {
+      "type": "splunk.column",
+      "title": "Last 14 days: drawn, hoisted, railed (t), plan as line",
+      "dataSources": {
+        "primary": "ds_movement"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "drawn_t": "#5C9BD6",
+          "hoisted_t": "#65A637",
+          "railed_t": "#A57BD6",
+          "day_plan_t": "#E1E6EB"
+        },
+        "overlayFields": "day_plan_t",
+        "yAxisTitleText": "t per day"
+      }
+    },
+    "viz_fe": {
+      "type": "splunk.line",
+      "title": "Fe percent vs illustrative target 67",
+      "dataSources": {
+        "primary": "ds_quality"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "fe_pct": "#5C9BD6",
+          "fe_target": "#F5A623"
+        }
+      }
+    },
+    "viz_ceiling": {
+      "type": "splunk.column",
+      "title": "Days outside the SiO2 or P ceiling (1 = outside)",
+      "dataSources": {
+        "primary": "ds_ceiling"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "off",
+        "seriesColorsByField": {
+          "outside": "#D93F3C"
+        }
+      }
+    },
+    "viz_inv_bar": {
+      "type": "splunk.bar",
+      "title": "Tonnes by node (illustrative)",
+      "dataSources": {
+        "primary": "ds_inventory_bar"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "off",
+        "seriesColors": [
+          "#5C9BD6"
+        ]
+      }
+    },
+    "viz_inv_table": {
+      "type": "splunk.table",
+      "title": "Inventory nodes",
+      "dataSources": {
+        "primary": "ds_inventory"
+      },
+      "options": {
+        "count": 10,
+        "showInternalFields": false,
+        "backgroundColor": "#1E2128",
+        "tableFormat": {
+          "rowBackgroundColors": "> table | seriesByName(\"_color_rank\") | rangeValue(rowColors)"
+        }
+      },
+      "context": {
+        "rowColors": [
+          {
+            "to": 1.5,
+            "value": "#5A2A2A"
+          },
+          {
+            "from": 1.5,
+            "to": 2.5,
+            "value": "#5A4A22"
+          },
+          {
+            "from": 2.5,
+            "value": "#1E2128"
+          }
+        ]
+      }
+    },
+    "viz_rail_bar": {
+      "type": "splunk.bar",
+      "title": "Railed toward Narvik and Luleå vs plan split, 14 days (Malmbanan)",
+      "dataSources": {
+        "primary": "ds_logistics"
+      },
+      "options": {
+        "backgroundColor": "#1E2128",
+        "legendDisplay": "bottom",
+        "seriesColorsByField": {
+          "shipped_t": "#5C9BD6",
+          "plan_t": "#8B90A0"
+        }
+      }
+    },
+    "viz_r_shipped": {
+      "type": "splunk.singlevalueradial",
+      "title": "Shipped vs plan, 14 days",
+      "dataSources": {
+        "primary": "ds_shipped"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"shipped_pct\") | lastPoint()",
+        "maxValue": 120,
+        "underLabel": "pct, illustrative",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> majorValue | rangeValue(pctColors)",
+        "radialStrokeColor": "> majorValue | rangeValue(pctColors)"
+      },
+      "context": {
+        "pctColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    },
+    "viz_on_plan": {
+      "type": "splunk.singlevalue",
+      "title": "Departures inside the on-plan window",
+      "dataSources": {
+        "primary": "ds_shipped"
+      },
+      "options": {
+        "majorValue": "> primary | seriesByName(\"on_plan_pct\") | lastPoint()",
+        "backgroundColor": "#1E2128",
+        "majorColor": "> primary | seriesByName(\"on_plan_pct\") | lastPoint() | rangeValue(bandColors)",
+        "unit": "%",
+        "unitPosition": "after",
+        "underLabel": "Illustrative departures, delay up to 10 min"
+      },
+      "context": {
+        "bandColors": [
+          {
+            "to": 80,
+            "value": "#D93F3C"
+          },
+          {
+            "from": 80,
+            "to": 95,
+            "value": "#F5A623"
+          },
+          {
+            "from": 95,
+            "value": "#65A637"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": {
+    "input_global_trp": {
+      "type": "input.timerange",
+      "title": "Time range",
+      "options": {
+        "token": "global_time",
+        "defaultValue": "-14d@d,now"
+      }
+    }
+  },
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "$global_time.earliest$",
+            "latest": "$global_time.latest$"
+          }
+        }
+      }
+    }
+  },
+  "layout": {
+    "globalInputs": [
+      "input_global_trp"
+    ],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 690,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_header",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 10,
+              "w": 1400,
+              "h": 90
+            }
+          },
+          {
+            "item": "viz_today_note",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 100,
+              "w": 1400,
+              "h": 40
+            }
+          },
+          {
+            "item": "viz_r_drawn",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 150,
+              "w": 455,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_r_crushed",
+            "type": "block",
+            "position": {
+              "x": 492,
+              "y": 150,
+              "w": 455,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_r_hoisted",
+            "type": "block",
+            "position": {
+              "x": 965,
+              "y": 150,
+              "w": 455,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_ytd",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 470,
+              "w": 1400,
+              "h": 200
+            }
+          }
+        ]
+      },
+      "layout_2": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 560,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_movement",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 20,
+              "w": 1400,
+              "h": 520
+            }
+          }
+        ]
+      },
+      "layout_3": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 620,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_fe",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 20,
+              "w": 1400,
+              "h": 300
+            }
+          },
+          {
+            "item": "viz_ceiling",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 340,
+              "w": 1400,
+              "h": 260
+            }
+          }
+        ]
+      },
+      "layout_4": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 500,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_inv_bar",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 20,
+              "w": 860,
+              "h": 460
+            }
+          },
+          {
+            "item": "viz_inv_table",
+            "type": "block",
+            "position": {
+              "x": 900,
+              "y": 20,
+              "w": 520,
+              "h": 460
+            }
+          }
+        ]
+      },
+      "layout_5": {
+        "type": "absolute",
+        "options": {
+          "width": 1440,
+          "height": 440,
+          "display": "auto-scale",
+          "backgroundColor": "#1A1C20"
+        },
+        "structure": [
+          {
+            "item": "viz_rail_bar",
+            "type": "block",
+            "position": {
+              "x": 20,
+              "y": 20,
+              "w": 860,
+              "h": 400
+            }
+          },
+          {
+            "item": "viz_r_shipped",
+            "type": "block",
+            "position": {
+              "x": 900,
+              "y": 20,
+              "w": 520,
+              "h": 240
+            }
+          },
+          {
+            "item": "viz_on_plan",
+            "type": "block",
+            "position": {
+              "x": 900,
+              "y": 280,
+              "w": 520,
+              "h": 140
+            }
+          }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "label": "Today",
+          "layoutId": "layout_1"
+        },
+        {
+          "label": "Movement",
+          "layoutId": "layout_2"
+        },
+        {
+          "label": "Quality",
+          "layoutId": "layout_3"
+        },
+        {
+          "label": "Inventory",
+          "layoutId": "layout_4"
+        },
+        {
+          "label": "Logistics",
+          "layoutId": "layout_5"
+        }
+      ],
+      "options": {
+        "showTabBar": true
+      }
+    }
+  },
+  "applicationProperties": {
+    "theme": "dark"
+  }
+}
+]]></definition>
+</dashboard>
