@@ -7,6 +7,7 @@ readonly TAG_KEY=kiirunavaara-demo
 readonly TAG_VALUE=splunk-enterprise
 readonly DEFAULT_NAME=kiruna-splunk-demo
 readonly DEFAULT_REGION=eu-north-1
+readonly DEFAULT_APP_BUCKET=kiruna-splunk-demo-app
 readonly APP_ID=lkab_kiruna_demo
 
 usage() {
@@ -22,13 +23,13 @@ The app directory must be lkab_kiruna_demo/ in the same checkout. That tree is
 on branch cursor/kiruna-app-v0.1. This script refuses a tree that contains a
 license file, a certificate, or a credential-shaped string.
 
-Required:
-  --app-bucket BUCKET        Existing S3 bucket you can write. The tarball is
-                             uploaded, copied to the instance with a 15-minute
-                             presigned URL, then deleted. The URL is not printed
-                             and is not written into the repo.
-
 Optional:
+  --app-bucket BUCKET        S3 bucket for the app tarball. Default, and the
+                             APP_BUCKET value: kiruna-splunk-demo-app.
+                             Create it with create-app-bucket.sh. The tarball
+                             is uploaded, copied to the instance with a
+                             15-minute presigned URL, then deleted. The URL is
+                             not printed and is not written into the repo.
   --profile NAME             AWS CLI profile
   --region REGION            Must be eu-north-1. That is the default.
   --name NAME                Default kiruna-splunk-demo
@@ -52,7 +53,7 @@ PROFILE=${AWS_PROFILE:-}
 AWS_REGION=${AWS_REGION:-${AWS_DEFAULT_REGION:-$DEFAULT_REGION}}
 NAME=${SPLUNK_DEMO_NAME:-$DEFAULT_NAME}
 INSTANCE_ID=${INSTANCE_ID:-}
-APP_BUCKET=${APP_BUCKET:-}
+APP_BUCKET=${APP_BUCKET:-$DEFAULT_APP_BUCKET}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

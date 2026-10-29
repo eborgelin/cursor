@@ -8,6 +8,7 @@ readonly TAG_KEY=kiirunavaara-demo
 readonly TAG_VALUE=splunk-enterprise
 readonly DEFAULT_NAME=kiruna-splunk-demo
 readonly DEFAULT_REGION=eu-north-1
+readonly DEFAULT_APP_BUCKET=kiruna-splunk-demo-app
 
 usage() {
   cat <<'EOF'
@@ -23,13 +24,13 @@ First run (no --after-manual-gate):
   value into chat or into these scripts.
 
 Second run, after that person says the gate is done:
-  bash scripts/aws/demo-pipeline.sh --after-manual-gate --app-bucket BUCKET
+  bash scripts/aws/demo-pipeline.sh --after-manual-gate
+
+The app bucket defaults to kiruna-splunk-demo-app (APP_BUCKET or --app-bucket).
+Create it first with create-app-bucket.sh.
 
 Required on the first run only when the instance does not exist yet:
   --admin-cidr CIDR
-
-Required with --after-manual-gate:
-  --app-bucket BUCKET
 
 Optional: --profile, --region (eu-north-1 only), --name, --instance-id.
 EOF
@@ -49,7 +50,7 @@ AWS_REGION=${AWS_REGION:-${AWS_DEFAULT_REGION:-$DEFAULT_REGION}}
 NAME=${SPLUNK_DEMO_NAME:-$DEFAULT_NAME}
 INSTANCE_ID=${INSTANCE_ID:-}
 ADMIN_CIDR=${ADMIN_CIDR:-}
-APP_BUCKET=${APP_BUCKET:-}
+APP_BUCKET=${APP_BUCKET:-$DEFAULT_APP_BUCKET}
 AFTER_GATE=no
 
 while [[ $# -gt 0 ]]; do
@@ -151,9 +152,10 @@ Stopped before the app install. This is the manual gate:
 
 Do not paste the password, the license file, or AWS keys into chat. When both are done, run:
 
-  bash scripts/aws/demo-pipeline.sh --after-manual-gate --app-bucket YOUR_BUCKET
+  bash scripts/aws/create-app-bucket.sh
+  bash scripts/aws/demo-pipeline.sh --after-manual-gate
 
-Use an S3 bucket this AWS identity can already write. The script uploads the app tarball, installs it, deletes the object, and does not create the bucket.
+The bucket name is kiruna-splunk-demo-app unless APP_BUCKET is set. create-app-bucket.sh creates that bucket. The install uploads the app tarball, then deletes the object.
 EOF
   exit 0
 fi

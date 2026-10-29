@@ -59,10 +59,21 @@ From a local terminal, with the CLI already aimed at eu-north-1:
 ```bash
 export ADMIN_CIDR=203.0.113.10/32
 # export AWS_PROFILE=your-splunk-profile
+# export APP_BUCKET=kiruna-splunk-demo-app
 
 bash scripts/aws/setup-splunk-enterprise.sh
 bash scripts/aws/demo-start.sh
 bash scripts/aws/demo-stop.sh
+bash scripts/aws/create-app-bucket.sh
+```
+
+`create-app-bucket.sh` stores the bucket name `kiruna-splunk-demo-app`. `APP_BUCKET` or `--app-bucket` overrides it. The same name is the default for `demo-pipeline.sh` and `install-demo-app.sh`. The bucket is private, in eu-north-1, and new objects use AES-256. The underlying call is:
+
+```bash
+aws s3api create-bucket \
+  --bucket kiruna-splunk-demo-app \
+  --region eu-north-1 \
+  --create-bucket-configuration LocationConstraint=eu-north-1
 ```
 
 The same flags work if you prefer them to environment variables. `203.0.113.10/32` is documentation-only; use the CIDR you will actually connect from.
@@ -74,12 +85,13 @@ The AWS Deployments plugin can sit in desktop Cursor. It does not replace these 
 ```bash
 bash scripts/aws/demo-pipeline.sh --admin-cidr 203.0.113.10/32
 # change the Marketplace admin password, then Emil installs the NFR
-bash scripts/aws/demo-pipeline.sh --after-manual-gate --app-bucket YOUR_BUCKET
+bash scripts/aws/create-app-bucket.sh
+bash scripts/aws/demo-pipeline.sh --after-manual-gate
 ```
 
-The first command creates the host, or starts it if it already exists, and then stops. The second command packages `lkab_kiruna_demo` (from this checkout, or from the already-fetched branch `cursor/kiruna-app-v0.1`), uploads that tarball to a bucket you name, installs it with Systems Manager, deletes the object, and runs `validate-demo.sh`.
+The first command creates the host, or starts it if it already exists, and then stops. `create-app-bucket.sh` creates `kiruna-splunk-demo-app` unless `APP_BUCKET` is set. The last command packages `lkab_kiruna_demo` (from this checkout, or from the already-fetched branch `cursor/kiruna-app-v0.1`), uploads that tarball to that bucket, installs it with Systems Manager, deletes the object, and runs `validate-demo.sh`.
 
-`YOUR_BUCKET` must already exist. The script does not create it. The 15-minute download URL is sent only inside the Systems Manager command and is not printed. It is for the app tarball only. Do not use this path for a license file or a password.
+The 15-minute download URL is sent only inside the Systems Manager command and is not printed. It is for the app tarball only. Do not use this path for a license file or a password.
 
 `validate-demo.sh` checks the package layout and, on the instance, `splunk version`, the app directory, and the `kiruna_events` stanza. It does not log in. Saving setup, enabling the generator, and reading Shift Brief stay in Splunk Web. AppInspect runs only when `splunk-appinspect` is on PATH. Zero failures is still the packaging exit for that CLI.
 
