@@ -9,6 +9,7 @@ import csv
 import json
 import os
 import sys
+import unicodedata
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = os.path.join(ROOT, "lkab_kiruna_demo")
@@ -277,6 +278,8 @@ def mine_section():
     heartbeat(v)
     with open(os.path.join(APP, "appserver", "static", "images", "kiruna_section.svg"), encoding="utf-8") as fh:
         svg = " ".join(line.strip() for line in fh)
+    # The choropleth renderer mangles non-ASCII text (even as character references), so fold it.
+    svg = unicodedata.normalize("NFKD", svg).encode("ascii", "ignore").decode("ascii")
     v.search("ds_levels", "Level status (summary lookup)",
              "| inputlookup kiruna_level_status\n| table svg_region_id status_code level_m status", live=True)
     v.add("viz_section", {
