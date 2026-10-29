@@ -2,7 +2,8 @@
 # One combined Splunk Enterprise host for the Kiirunavaara demo.
 # Run from a local terminal with the AWS CLI. Region is eu-north-1.
 # The instance boots a Splunk Enterprise 10.6.x image this account can already launch.
-# This file has no account id, access key, password, token, AMI id, or license.
+# This file has no account id, access key, password, token, or license.
+# The eu-north-1 image id below is the subscribed Splunk 10.6.1.1 AMI, not a secret.
 set -euo pipefail
 
 readonly TAG_KEY=kiirunavaara-demo
@@ -12,6 +13,8 @@ readonly DEFAULT_INSTANCE_TYPE=m6i.2xlarge
 readonly DEFAULT_VOLUME_GB=300
 readonly DEFAULT_REGION=eu-north-1
 readonly DEFAULT_AMI_NAME=splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
+readonly DEFAULT_AMI_ID=ami-00eda91ac5d3c3df5
+readonly MARKETPLACE_INSTANCE_TYPE=m5.2xlarge
 
 usage() {
   cat <<'EOF'
@@ -21,11 +24,9 @@ Run this from a local terminal where the AWS CLI is installed and pointed at
 the Splunk AWS account. The region is eu-north-1. Pass --profile or
 AWS_PROFILE when the default CLI identity is not that account.
 
-The instance boots the x86_64 image named
-splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
-when this account can already launch it in eu-north-1. The script looks up
-the AMI id at launch and does not store one. It does not subscribe to
-Marketplace and does not download an RPM.
+The instance boots ami-00eda91ac5d3c3df5 in eu-north-1. That is
+splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d.
+The script does not subscribe to Marketplace and does not download an RPM.
 
 Required:
   --admin-cidr CIDR          VPN network allowed to reach Splunk Web (8000) and splunkd (8089)
@@ -33,9 +34,8 @@ Required:
 Optional:
   --profile NAME             AWS CLI profile
   --region REGION            Must be eu-north-1. That is the default.
-  --ami-name NAME            Image name to launch. Default is the 10.6.1.1 name above.
-  --ami-id AMI               Use this AMI id instead of the named image.
-                             It must be an x86_64 Splunk Enterprise 10.6.x image.
+  --ami-id AMI               Default ami-00eda91ac5d3c3df5, the eu-north-1 id above.
+                             It must be an x86_64 Splunk 10.6.x image.
   --name NAME                Resource name (default kiruna-splunk-demo)
   --vpc-id ID                Use this VPC instead of creating one
   --subnet-id ID             Subnet in that VPC (required with --vpc-id).
@@ -68,7 +68,7 @@ note() {
 PROFILE=${AWS_PROFILE:-}
 AWS_REGION=${AWS_REGION:-${AWS_DEFAULT_REGION:-$DEFAULT_REGION}}
 ADMIN_CIDR=${ADMIN_CIDR:-}
-AMI_ID=${SPLUNK_AMI_ID:-}
+AMI_ID=${SPLUNK_AMI_ID:-$DEFAULT_AMI_ID}
 AMI_NAME=${SPLUNK_AMI_NAME:-$DEFAULT_AMI_NAME}
 NAME=${SPLUNK_DEMO_NAME:-$DEFAULT_NAME}
 VPC_ID=${VPC_ID:-}
@@ -516,7 +516,7 @@ read_root_device() {
 }
 
 launch_enterprise() {
-  local role err rc attempt
+  local role err rc
   role="${NAME}-role"
   drop_installer_policy "$role"
   if [[ -n "$AMI_ID" ]]; then
@@ -529,7 +529,23 @@ launch_enterprise() {
   if [[ $(wc -c <"${tmp_dir}/user-data.sh") -gt 16000 ]]; then
     die "User-data is larger than 16 KB."
   fi
-  cat >"${tmp_dir}/bdm.json" <<EOF
+  write_root_bdm() {
+    local mode=$1
+    if [[ "$mode" == size ]]; then
+      cat >"${tmp_dir}/bdm.json" <<EOF
+[
+  {
+    "DeviceName": "${ROOT_DEVICE_NAME}",
+    "Ebs": {
+      "VolumeSize": ${LAUNCH_VOLUME_GB},
+      "DeleteOnTermination": false
+    }
+  }
+]
+EOF
+      return 0
+    fi
+    cat >"${tmp_dir}/bdm.json" <<EOF
 [
   {
     "DeviceName": "${ROOT_DEVICE_NAME}",
@@ -544,6 +560,7 @@ launch_enterprise() {
   }
 ]
 EOF
+  }
   if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
     ASSOCIATE_PUBLIC_IP=true
   else
@@ -562,33 +579,67 @@ EOF
 EOF
   err=$(mktemp)
   INSTANCE_ID=""
-  for ((attempt = 1; attempt <= 12; attempt++)); do
+  local launch_type bdm_mode token idx profile_waits n
+  local -a try_types try_modes
+  try_types=("$INSTANCE_TYPE")
+  try_modes=(full)
+  if [[ "$INSTANCE_TYPE" == "$DEFAULT_INSTANCE_TYPE" ]]; then
+    try_types+=("$MARKETPLACE_INSTANCE_TYPE" "$INSTANCE_TYPE" "$MARKETPLACE_INSTANCE_TYPE")
+    try_modes+=(full size size)
+  else
+    try_types+=("$INSTANCE_TYPE")
+    try_modes+=(size)
+  fi
+  idx=0
+  profile_waits=0
+  n=${#try_types[@]}
+  while ((idx < n)); do
+    launch_type=${try_types[$idx]}
+    bdm_mode=${try_modes[$idx]}
+    write_root_bdm "$bdm_mode"
+    token="${NAME}-${launch_type//./-}-${bdm_mode}"
     set +e
     INSTANCE_ID=$(aws_cli ec2 run-instances \
       --image-id "$RESOLVED_AMI" \
-      --instance-type "$INSTANCE_TYPE" \
+      --instance-type "$launch_type" \
       --iam-instance-profile "Name=${NAME}-profile" \
       --network-interfaces "file://${tmp_dir}/nic.json" \
       --block-device-mappings "file://${tmp_dir}/bdm.json" \
       --user-data "file://${tmp_dir}/user-data.sh" \
       --metadata-options 'HttpTokens=required,HttpEndpoint=enabled,HttpPutResponseHopLimit=2' \
       --instance-initiated-shutdown-behavior stop \
-      --client-token "${NAME}-enterprise" \
+      --client-token "$token" \
       --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script},{Key=kiruna-splunk-image,Value=${RESOLVED_AMI_VERSION}}]" \
       --query 'Instances[0].InstanceId' \
       --output text 2>"$err")
     rc=$?
     set -e
     if ((rc == 0)) && [[ -n "$INSTANCE_ID" && "$INSTANCE_ID" != "None" ]]; then
+      INSTANCE_TYPE=$launch_type
       break
     fi
     INSTANCE_ID=""
-    if grep -Eqi 'instance profile|InvalidParameterValue|not yet propagated|does not exist' "$err" && ((attempt < 12)); then
-      note "Waiting for the instance profile to become usable (${attempt}/12)."
+    if grep -Eqi 'instance profile|not yet propagated|InvalidParameterValue.*profile|does not exist' "$err" && ((profile_waits < 12)); then
+      profile_waits=$((profile_waits + 1))
+      note "Waiting for the instance profile to become usable (${profile_waits}/12)."
       sleep 10
       continue
     fi
-    if grep -Eqi 'OptInRequired|AuthFailure|not subscribed|Marketplace' "$err"; then
+    if grep -Eqi 'instance configuration for this AWS Marketplace product|supported instance types' "$err"; then
+      idx=$((idx + 1))
+      if ((idx < n)); then
+        if [[ "${try_modes[$idx]}" == full ]]; then
+          note "The Marketplace product rejected ${launch_type}. Retrying ${try_types[$idx]}, which is also 8 vCPU and 32 GiB, with the same encrypted gp3 root."
+        else
+          note "The Marketplace product rejected that shape. Retrying ${try_types[$idx]} with a ${LAUNCH_VOLUME_GB} GiB root and the image's own volume settings."
+        fi
+        continue
+      fi
+      cat "$err" >&2
+      rm -f "$err"
+      die "The Marketplace product refused ${RESOLVED_AMI} in ${AWS_REGION}. The subscription is already in place. Re-run with --instance-type set to a type that product lists."
+    fi
+    if grep -Eqi 'OptInRequired|AuthFailure|not subscribed' "$err"; then
       cat "$err" >&2
       rm -f "$err"
       die "This account cannot launch ${RESOLVED_AMI} in ${AWS_REGION}. Use an image that is already subscribed or shared here."

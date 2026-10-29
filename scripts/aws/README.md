@@ -9,10 +9,10 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - A Splunk AWS account. The script prints `aws sts get-caller-identity` and does not check a specific account number. Point the CLI at that account yourself.
 - AWS CLI v2, non-interactive (`AWS_PAGER` is cleared by the scripts).
 - Permission to create the EC2 and IAM objects below, and `ssm:SendCommand` plus `ssm:GetCommandInvocation` if you want the script to confirm Splunk is on the image. Session Manager is used from this same local terminal.
-- The x86_64 image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`, already launchable in eu-north-1. The script looks up its AMI id at launch. It does not subscribe to Marketplace and it does not download an RPM.
+- The x86_64 image `ami-00eda91ac5d3c3df5` in eu-north-1, named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. That id is the image, not a secret. The script does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script resolves that name in eu-north-1 from images this account owns and from AWS Marketplace. A subscription does not copy the image into the account. The script does not store an AMI id and does not subscribe. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. If that Marketplace product rejects `m6i.2xlarge`, the script retries `m5.2xlarge` (also 8 vCPU and 32 GiB) with the same disk. If the product still rejects the encrypted gp3 root, it retries a 300 GiB root that keeps the image's own volume type. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
@@ -27,8 +27,7 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 | `--region` | `AWS_REGION` or `AWS_DEFAULT_REGION` | no | `eu-north-1` only |
 | `--profile` | `AWS_PROFILE` | no | ambient credentials |
 | `--admin-cidr` | `ADMIN_CIDR` | yes | |
-| `--ami-name` | `SPLUNK_AMI_NAME` | no | `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` |
-| `--ami-id` | `SPLUNK_AMI_ID` | no | lookup of that name |
+| `--ami-id` | `SPLUNK_AMI_ID` | no | `ami-00eda91ac5d3c3df5` in eu-north-1 |
 | `--name` | `SPLUNK_DEMO_NAME` | no | `kiruna-splunk-demo` |
 | `--vpc-id` | `VPC_ID` | no | script creates a VPC |
 | `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | subnet the VPN can reach |
@@ -43,7 +42,7 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 Daily ingest is unmeasured. The plan says not to publish a megabyte claim for the generator, and not to turn the "about half of pre-indexed volume" planning factor into a disk total until a measured day exists. The NFR entitlement below is not that measurement.
 
 - **Instance:** `m6i.2xlarge` (8 vCPU, 32 GiB, x86-64, not burstable). One presenter, one combined indexer and search head, synthetic ticks. Splunk's production single-instance reference is 24 vCPU and 12 GiB, and a single-instance ITSI install publishes a higher CPU floor (32 vCPU in the ITSI hardware table). This box meets the ITSI single-instance RAM floor (32 GiB) so the optional ITSI screen has memory, without buying a production reference machine for an unmeasured demo. Graviton is not used: the Splunk Enterprise 10.6 image used here is x86_64. Override with `--instance-type` if the talk is CPU-bound.
-- **Disk:** 300 GiB gp3 on the AMI root volume. Splunk is already installed on that image, so a second disk is not mounted over `/opt/splunk`. gp3 is set to 3000 IOPS and 125 MB/s, encrypted, and kept if the instance is terminated. Splunk's reference hardware says a search head needs at least 300 GB of dedicated storage. 300 GiB is that floor, not `daily ingest × 21 × 0.50`. `frozenTimePeriodInDays = 21` can still freeze early if a size cap is hit; after backfill, check that the oldest event is still inside 14 days. Indexing stops by default when free space on the index volume is under 5 GB.
+- **Disk:** 300 GiB gp3 on the AMI root volume. Splunk is already installed on that image, so a second disk is not mounted over `/opt/splunk`. gp3 is set to 3000 IOPS and 125 MB/s, encrypted with the account's default EBS key (AES-256), and kept if the instance is terminated. If Marketplace refuses that volume shape, the launch keeps 300 GiB and `DeleteOnTermination=false` and uses the image's own volume type. Splunk's reference hardware says a search head needs at least 300 GB of dedicated storage. 300 GiB is that floor, not `daily ingest × 21 × 0.50`. `frozenTimePeriodInDays = 21` can still freeze early if a size cap is hit; after backfill, check that the oldest event is still inside 14 days. Indexing stops by default when free space on the index volume is under 5 GB.
 
 Sources used for those choices: [Reference hardware](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/performance-reference/reference-hardware), [Estimate your storage requirements](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/hardware-capacity-planning/estimate-your-storage-requirements), [Install on Linux](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/install-splunk-enterprise-on-linux-or-macos/install-on-linux), [Architecture and ports](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/plan-your-splunk-enterprise-installation/splunk-enterprise-architecture-and-processes), [How licensing works](https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.4/configure-splunk-licenses/how-splunk-enterprise-licensing-works), [Plan your ITSI deployment](https://help.splunk.com/en/splunk-it-service-intelligence/splunk-it-service-intelligence/install-and-upgrade/4.21/planning/plan-your-itsi-deployment). Amazon Linux 2023 x86-64 is a supported Enterprise platform in the installation manual's system requirements.
 
@@ -114,9 +113,9 @@ Re-running setup does not replace an instance that is already there. It will add
 - A VPC `10.42.0.0/16`, public subnet `10.42.1.0/24`, internet gateway, and a default route, **or** the VPC and subnet you passed. A supplied subnet is the VPN path: the instance has no public address, and `--admin-cidr` is the VPN range. The script does not change your routes.
 - A security group: TCP **8000** (Splunk Web) and TCP **8089** (splunkd) from `ADMIN_CIDR` only. No SSH. Port 22 is closed because the plan does not need it. HEC 8088 and forwarder 9997 stay closed; v1 ingest is the local modular input. Egress is TCP 443 and DNS (TCP/UDP 53) only, so the instance can reach Systems Manager. `0.0.0.0/0` is not used as an ingress rule.
 - An instance role with `AmazonSSMManagedInstanceCore`. No static keys on the instance. IMDSv2 is required.
-- One `m6i.2xlarge` instance, unless you override the type. OS timezone is set to `Europe/Stockholm`.
-- The named Splunk 10.6.1.1 x86_64 image, if this account can already launch it. The script does not subscribe to Marketplace.
-- One encrypted 300 GiB gp3 volume, the AMI root, tagged `kiruna-volume=splunk-data` and kept if the instance is stopped or terminated. No Elastic IP and no NAT gateway, so a stop releases the public address and does not leave a NAT charge. The volume still bills while stopped.
+- One `m6i.2xlarge` instance, unless Marketplace rejects that type or you override it. The fallback type is `m5.2xlarge`. OS timezone is set to `Europe/Stockholm`.
+- The Splunk 10.6.1.1 x86_64 image `ami-00eda91ac5d3c3df5`. The script does not subscribe to Marketplace.
+- One 300 GiB AMI root volume, tagged `kiruna-volume=splunk-data` and kept if the instance is stopped or terminated. The requested type is encrypted gp3. No Elastic IP and no NAT gateway, so a stop releases the public address and does not leave a NAT charge. The volume still bills while stopped.
 - Splunk is already on the image and starts with the instance. This script does not set the admin password.
 
 ## After the instance is up
@@ -142,13 +141,13 @@ Then remove the instance profile and role `$NAME-profile` and `$NAME-role`: remo
 
 ## Swapping this host to Splunk Show later
 
-The VPC, subnet, internet route, and the security group rules for 8000 and 8089 are independent of where the Splunk bits come from. In `setup-splunk-enterprise.sh`, the only Enterprise-specific launch path is the block marked `BEGIN INSTANCE_SOURCE` / `END INSTANCE_SOURCE`: the 10.6.x image lookup and the `RunInstances` call. A later Splunk Show image replaces that block and keeps the network and security group as they are. Do not add a license file, a password, or an AMI id in that block either.
+The VPC, subnet, internet route, and the security group rules for 8000 and 8089 are independent of where the Splunk bits come from. In `setup-splunk-enterprise.sh`, the only Enterprise-specific launch path is the block marked `BEGIN INSTANCE_SOURCE` / `END INSTANCE_SOURCE`: the 10.6.x image and the `RunInstances` call. This demo pins `ami-00eda91ac5d3c3df5` for eu-north-1. A later Splunk Show image replaces that id and keeps the network and security group as they are. Do not add a license file or a password in that block.
 
 ## På svenska
 
 Skripten skapar, startar och stoppar **en** Splunk Enterprise-värd för Kiirunavaara-demon. Kör dem från en lokal terminal med AWS CLI. Regionen är eu-north-1. Skripten ställer inga frågor.
 
-Du anger vilket CIDR som får nå port 8000 och 8089. Instansen startar från avbildningen `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d` om kontot redan kan starta den. Ingen licensfil, inget lösenord, ingen AMI-id och ingen token ligger i repot.
+Du anger vilket CIDR som får nå port 8000 och 8089. Instansen startar från `ami-00eda91ac5d3c3df5` (`splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`) i eu-north-1. Den id:n är avbildningen, inte en hemlighet. Ingen licensfil, inget lösenord och ingen token ligger i repot.
 
 När instansen är uppe gör en person två saker. Först byter du det initiala admin-lösenordet från Marketplace-avbildningen. Sedan lägger Emil själv in NFR-licensen i Splunk Web: obegränsad, 50 GB per dag. Skriptet väntar inte på licensen och avslutas inte med fel om den saknas.
 
