@@ -78,6 +78,15 @@ aws s3api create-bucket \
 
 The same flags work if you prefer them to environment variables. `203.0.113.10/32` is documentation-only; use the CIDR you will actually connect from.
 
+If `ec2:CreateVpc` is denied by an organization service control policy, pass a public subnet that already exists. Administrator access does not override that deny. The subnet must already route `0.0.0.0/0` to an internet gateway. The script then creates the security group and the instance in that network, and it does not create a VPC, subnet, or internet gateway.
+
+```bash
+bash scripts/aws/setup-splunk-enterprise.sh \
+  --admin-cidr 203.0.113.10/32 \
+  --vpc-id vpc-xxxxxxxx \
+  --subnet-id subnet-xxxxxxxx
+```
+
 ## Desktop Cursor and the AWS Deployments plugin
 
 The AWS Deployments plugin can sit in desktop Cursor. It does not replace these scripts, and it does not open this Cloud agent. A project rule, `.cursor/rules/kiruna-aws-demo.mdc`, tells that desktop agent to ignore the plugin's "generate infrastructure" path (no CDK, CloudFormation, Terraform, Elastic Beanstalk, ECS, or App Runner) and to run this sequence in the local terminal where the AWS CLI is already configured.

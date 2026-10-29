@@ -810,7 +810,7 @@ require_public_subnet() {
 }
 
 ensure_network() {
-  local raw subnet_vpc az igw rtb existing_gw
+  local raw subnet_vpc az igw rtb existing_gw vpc_err vpc_rc
   OWNED_NETWORK=no
   if [[ -n "$VPC_ID" ]]; then
     raw=$(aws_text ec2 describe-vpcs --vpc-ids "$VPC_ID" --query 'Vpcs[0].VpcId')
@@ -837,14 +837,35 @@ ensure_network() {
   if [[ ${#IDS[@]} -eq 1 ]]; then
     VPC_ID=${IDS[0]}
   else
-    VPC_ID=$(aws_text ec2 create-vpc \
+    vpc_err=$(mktemp)
+    set +e
+    VPC_ID=$(aws_cli ec2 create-vpc \
       --cidr-block 10.42.0.0/16 \
       --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script}]" \
-      --query 'Vpc.VpcId')
+      --query 'Vpc.VpcId' \
+      --output text 2>"$vpc_err")
+    vpc_rc=$?
+    set -e
+    if [[ "$VPC_ID" == "None" || "$VPC_ID" == "null" ]]; then
+      VPC_ID=""
+    fi
+    if ((vpc_rc != 0)) || [[ -z "$VPC_ID" ]]; then
+      cat "$vpc_err" >&2
+      if grep -Eq 'UnauthorizedOperation|explicit deny|CreateVpc' "$vpc_err"; then
+        rm -f "$vpc_err"
+        die "This identity cannot create a VPC in ${AWS_REGION}. An organization service control policy is denying ec2:CreateVpc. Re-run with --vpc-id and --subnet-id of a public subnet that already exists in ${AWS_REGION}. This script will use that network and will not create a VPC, subnet, or internet gateway."
+      fi
+      rm -f "$vpc_err"
+      die "VPC creation did not return a VPC id."
+    fi
+    rm -f "$vpc_err"
   fi
   OWNED_NETWORK=yes
-  aws_cli ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-support '{"Value":true}'
-  aws_cli ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-hostnames '{"Value":true}'
+  [[ -n "$VPC_ID" ]] || die "VPC creation did not return a VPC id."
+  # Shorthand, not a JSON blob. A JSON value here makes the AWS CLI drop vpc-id
+  # and return MissingParameter vpcId.
+  aws_cli ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-support Value=true
+  aws_cli ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-hostnames Value=true
 
   igw=$(aws_text ec2 describe-internet-gateways \
     --filters "Name=attachment.vpc-id,Values=${VPC_ID}" \
@@ -883,7 +904,8 @@ ensure_network() {
       --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=${NAME}-public},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script}]" \
       --query 'Subnet.SubnetId')
   fi
-  aws_cli ec2 modify-subnet-attribute --subnet-id "$SUBNET_ID" --map-public-ip-on-launch
+  [[ -n "$SUBNET_ID" ]] || die "Subnet creation did not return a subnet id."
+  aws_cli ec2 modify-subnet-attribute --subnet-id "$SUBNET_ID" --map-public-ip-on-launch Value=true
 
   rtb=$(aws_text ec2 describe-route-tables \
     --filters "Name=vpc-id,Values=${VPC_ID}" "Name=association.main,Values=true" \
