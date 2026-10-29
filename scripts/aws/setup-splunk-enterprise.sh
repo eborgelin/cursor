@@ -9,7 +9,7 @@ set -euo pipefail
 readonly TAG_KEY=kiirunavaara-demo
 readonly TAG_VALUE=splunk-enterprise
 readonly DEFAULT_NAME=kiruna-splunk-demo
-readonly DEFAULT_INSTANCE_TYPE=m6i.2xlarge
+readonly DEFAULT_INSTANCE_TYPE=c6i.4xlarge
 readonly DEFAULT_VOLUME_GB=300
 readonly DEFAULT_REGION=eu-north-1
 readonly DEFAULT_AMI_NAME=splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
@@ -41,7 +41,8 @@ Optional:
                              A supplied subnet is reached over the VPN.
                              The instance does not get a public address.
   --availability-zone NAME   Used only when this script creates the subnet
-  --instance-type TYPE       Default m6i.2xlarge
+  --instance-type TYPE       Default c6i.4xlarge. The Marketplace listing
+                             accepts this type. It is 16 vCPU and 32 GiB.
   --volume-size-gb N         Splunk volume in GiB (default 300). This is the
                              AMI root volume, because Splunk is already on the image.
 
@@ -200,7 +201,7 @@ validate_args() {
   fi
   [[ "$NAME" =~ ^[A-Za-z][A-Za-z0-9-]{1,40}$ ]] || die "Name must start with a letter and use only letters, digits, and hyphens (41 characters max)."
   [[ -n "$INSTANCE_TYPE" ]] || die "Instance type is empty."
-  [[ "$INSTANCE_TYPE" =~ ^[a-z0-9]+\.[a-z0-9]+$ ]] || die "Instance type must look like m6i.2xlarge."
+  [[ "$INSTANCE_TYPE" =~ ^[a-z0-9]+\.[a-z0-9]+$ ]] || die "Instance type must look like c6i.4xlarge."
   case "$INSTANCE_TYPE" in
     a1.*|t4g.*|m6g.*|m6gd.*|m7g.*|m7gd.*|m8g.*|c6g.*|c6gd.*|c6gn.*|c7g.*|c7gd.*|c7gn.*|c8g.*|r6g.*|r6gd.*|r7g.*|r7gd.*|r8g.*|x2gd.*|im4gn.*|is4gen.*|g5g.*|hpc7g.*)
       die "The Splunk Enterprise 10.6 image used here is x86_64. ${INSTANCE_TYPE} is a Graviton type. Use ${DEFAULT_INSTANCE_TYPE} or another x86-64 type."

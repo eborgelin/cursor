@@ -12,7 +12,7 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - The x86_64 image `ami-00eda91ac5d3c3df5` in eu-north-1, named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. That id is the image, not a secret. The script does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. If that Marketplace product rejects the custom encrypted gp3 root, the script keeps `m6i.2xlarge` and retries a simpler 300 GiB root. It does not fall back to an older instance type. An organization service control policy can deny `ec2:RunInstances` for a type even when the role is AdministratorAccess. That deny is not CreateImage access. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. The instance type is `c6i.4xlarge` (16 vCPU, 32 GiB). The Marketplace listing rejected `m6i.2xlarge`, and the organization policy denied `m5.2xlarge`. If the product rejects the custom encrypted gp3 root, the script keeps `c6i.4xlarge` and retries a simpler 300 GiB root. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
@@ -32,7 +32,7 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 | `--vpc-id` | `VPC_ID` | no | script creates a VPC |
 | `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | subnet the VPN can reach |
 | `--availability-zone` | `AVAILABILITY_ZONE` | no | first available zone |
-| `--instance-type` | `INSTANCE_TYPE` | no | `m6i.2xlarge` |
+| `--instance-type` | `INSTANCE_TYPE` | no | `c6i.4xlarge` |
 | `--volume-size-gb` | `VOLUME_SIZE_GB` | no | `300` |
 
 `demo-start.sh` and `demo-stop.sh` use `--region`, `--profile`, `--name`, and optional `--instance-id` (`INSTANCE_ID`).
@@ -41,7 +41,7 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 
 Daily ingest is unmeasured. The plan says not to publish a megabyte claim for the generator, and not to turn the "about half of pre-indexed volume" planning factor into a disk total until a measured day exists. The NFR entitlement below is not that measurement.
 
-- **Instance:** `m6i.2xlarge` (8 vCPU, 32 GiB, x86-64, not burstable). One presenter, one combined indexer and search head, synthetic ticks. Splunk's production single-instance reference is 24 vCPU and 12 GiB, and a single-instance ITSI install publishes a higher CPU floor (32 vCPU in the ITSI hardware table). This box meets the ITSI single-instance RAM floor (32 GiB) so the optional ITSI screen has memory, without buying a production reference machine for an unmeasured demo. Graviton is not used: the Splunk Enterprise 10.6 image used here is x86_64. Override with `--instance-type` if the talk is CPU-bound.
+- **Instance:** `c6i.4xlarge` (16 vCPU, 32 GiB, x86-64, not burstable). One presenter, one combined indexer and search head, synthetic ticks. The demo target was 8 vCPU and 32 GiB. This Marketplace listing rejected `m6i.2xlarge`, and `c6i.2xlarge` has only 16 GiB, so `c6i.4xlarge` is the smallest current-generation type here that keeps the 32 GiB RAM floor. Splunk's production single-instance reference is 24 vCPU and 12 GiB, and a single-instance ITSI install publishes a higher CPU floor (32 vCPU in the ITSI hardware table). Graviton is not used: the Splunk Enterprise 10.6 image used here is x86_64.
 - **Disk:** 300 GiB gp3 on the AMI root volume. Splunk is already installed on that image, so a second disk is not mounted over `/opt/splunk`. gp3 is set to 3000 IOPS and 125 MB/s, encrypted with the account's default EBS key (AES-256), and kept if the instance is terminated. If Marketplace refuses that volume shape, the launch keeps 300 GiB and `DeleteOnTermination=false` and uses the image's own volume type. Splunk's reference hardware says a search head needs at least 300 GB of dedicated storage. 300 GiB is that floor, not `daily ingest × 21 × 0.50`. `frozenTimePeriodInDays = 21` can still freeze early if a size cap is hit; after backfill, check that the oldest event is still inside 14 days. Indexing stops by default when free space on the index volume is under 5 GB.
 
 Sources used for those choices: [Reference hardware](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/performance-reference/reference-hardware), [Estimate your storage requirements](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/hardware-capacity-planning/estimate-your-storage-requirements), [Install on Linux](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/install-splunk-enterprise-on-linux-or-macos/install-on-linux), [Architecture and ports](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/plan-your-splunk-enterprise-installation/splunk-enterprise-architecture-and-processes), [How licensing works](https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.4/configure-splunk-licenses/how-splunk-enterprise-licensing-works), [Plan your ITSI deployment](https://help.splunk.com/en/splunk-it-service-intelligence/splunk-it-service-intelligence/install-and-upgrade/4.21/planning/plan-your-itsi-deployment). Amazon Linux 2023 x86-64 is a supported Enterprise platform in the installation manual's system requirements.
@@ -113,7 +113,7 @@ Re-running setup does not replace an instance that is already there. It will add
 - A VPC `10.42.0.0/16`, public subnet `10.42.1.0/24`, internet gateway, and a default route, **or** the VPC and subnet you passed. A supplied subnet is the VPN path: the instance has no public address, and `--admin-cidr` is the VPN range. The script does not change your routes.
 - A security group: TCP **8000** (Splunk Web) and TCP **8089** (splunkd) from `ADMIN_CIDR` only. No SSH. Port 22 is closed because the plan does not need it. HEC 8088 and forwarder 9997 stay closed; v1 ingest is the local modular input. Egress is TCP 443 and DNS (TCP/UDP 53) only, so the instance can reach Systems Manager. `0.0.0.0/0` is not used as an ingress rule.
 - An instance role with `AmazonSSMManagedInstanceCore`. No static keys on the instance. IMDSv2 is required.
-- One `m6i.2xlarge` instance, unless you pass `--instance-type`. The script stays on that type. OS timezone is set to `Europe/Stockholm`.
+- One `c6i.4xlarge` instance, unless you pass `--instance-type`. The script stays on that type. OS timezone is set to `Europe/Stockholm`. No SSH key. Port 22 stays closed.
 - The Splunk 10.6.1.1 x86_64 image `ami-00eda91ac5d3c3df5`. The script does not subscribe to Marketplace.
 - One 300 GiB AMI root volume, tagged `kiruna-volume=splunk-data` and kept if the instance is stopped or terminated. The requested type is encrypted gp3. No Elastic IP and no NAT gateway, so a stop releases the public address and does not leave a NAT charge. The volume still bills while stopped.
 - Splunk is already on the image and starts with the instance. This script does not set the admin password.
@@ -155,4 +155,4 @@ När instansen är uppe gör en person två saker. Först byter du det initiala 
 
 `demo-stop.sh` stoppar bara instansen. Disk, säkerhetsgrupp och installationen ligger kvar. `demo-start.sh` startar samma instans. Publik IP kan bytas efter stopp.
 
-Standard: `m6i.2xlarge` och 300 GiB gp3 för `/opt/splunk`. Motiveringen står på engelska ovan.
+Standard: `c6i.4xlarge` och 300 GiB gp3 för `/opt/splunk`. Motiveringen står på engelska ovan.

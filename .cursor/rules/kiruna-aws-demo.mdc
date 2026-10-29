@@ -8,7 +8,7 @@ alwaysApply: true
 The AWS Deployments plugin (`deploy-on-aws`) may be installed. In this repository it is not the deployer.
 
 - Use `awsknowledge` for EC2, Systems Manager, and Marketplace image questions.
-- Use `awspricing` only when someone asks what this host costs. The host is already `m6i.2xlarge`, a 300 GiB gp3 root volume, in `eu-north-1`. Do not change that size from a pricing suggestion.
+- Use `awspricing` only when someone asks what this host costs. The host is already `c6i.4xlarge`, a 300 GiB gp3 root volume, in `eu-north-1`. Do not change that size from a pricing suggestion. The Marketplace listing rejected `m6i.2xlarge`.
 - Do not use `awsiac` to generate CDK, CloudFormation, Terraform, Elastic Beanstalk, ECS, or App Runner for this demo. Do not subscribe to a new Marketplace product.
 
 "Deploy to AWS", "start the demo", and "validate the build" mean this sequence, from a local terminal whose AWS CLI is already aimed at the Splunk account. Never ask for access keys, the Splunk admin password, or a license file. Do not write those into the repo, user-data, or a script.
