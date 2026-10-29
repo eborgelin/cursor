@@ -14,7 +14,6 @@ readonly DEFAULT_VOLUME_GB=300
 readonly DEFAULT_REGION=eu-north-1
 readonly DEFAULT_AMI_NAME=splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d
 readonly DEFAULT_AMI_ID=ami-00eda91ac5d3c3df5
-readonly MARKETPLACE_INSTANCE_TYPE=m5.2xlarge
 
 usage() {
   cat <<'EOF'
@@ -531,8 +530,9 @@ launch_enterprise() {
   fi
   write_root_bdm() {
     local mode=$1
-    if [[ "$mode" == size ]]; then
-      cat >"${tmp_dir}/bdm.json" <<EOF
+    case "$mode" in
+      size)
+        cat >"${tmp_dir}/bdm.json" <<EOF
 [
   {
     "DeviceName": "${ROOT_DEVICE_NAME}",
@@ -543,9 +543,24 @@ launch_enterprise() {
   }
 ]
 EOF
-      return 0
-    fi
-    cat >"${tmp_dir}/bdm.json" <<EOF
+        ;;
+      plain)
+        cat >"${tmp_dir}/bdm.json" <<EOF
+[
+  {
+    "DeviceName": "${ROOT_DEVICE_NAME}",
+    "Ebs": {
+      "VolumeSize": ${LAUNCH_VOLUME_GB},
+      "VolumeType": "gp3",
+      "Encrypted": true,
+      "DeleteOnTermination": false
+    }
+  }
+]
+EOF
+        ;;
+      *)
+        cat >"${tmp_dir}/bdm.json" <<EOF
 [
   {
     "DeviceName": "${ROOT_DEVICE_NAME}",
@@ -560,6 +575,8 @@ EOF
   }
 ]
 EOF
+        ;;
+    esac
   }
   if [[ "${USE_PUBLIC_IP:-}" == yes ]]; then
     ASSOCIATE_PUBLIC_IP=true
@@ -580,21 +597,13 @@ EOF
   err=$(mktemp)
   INSTANCE_ID=""
   local launch_type bdm_mode token idx profile_waits n
-  local -a try_types try_modes
-  try_types=("$INSTANCE_TYPE")
-  try_modes=(full)
-  if [[ "$INSTANCE_TYPE" == "$DEFAULT_INSTANCE_TYPE" ]]; then
-    try_types+=("$MARKETPLACE_INSTANCE_TYPE" "$INSTANCE_TYPE" "$MARKETPLACE_INSTANCE_TYPE")
-    try_modes+=(full size size)
-  else
-    try_types+=("$INSTANCE_TYPE")
-    try_modes+=(size)
-  fi
+  local -a try_modes
+  launch_type=$INSTANCE_TYPE
+  try_modes=(full plain size)
   idx=0
   profile_waits=0
-  n=${#try_types[@]}
+  n=${#try_modes[@]}
   while ((idx < n)); do
-    launch_type=${try_types[$idx]}
     bdm_mode=${try_modes[$idx]}
     write_root_bdm "$bdm_mode"
     token="${NAME}-${launch_type//./-}-${bdm_mode}"
@@ -625,19 +634,24 @@ EOF
       sleep 10
       continue
     fi
+    if grep -Eqi 'explicit deny|service control policy|UnauthorizedOperation' "$err"; then
+      cat "$err" >&2
+      rm -f "$err"
+      die "An organization service control policy explicitly denied ec2:RunInstances for ${launch_type}. AdministratorAccess does not override that deny. This is not CreateImage access. The Splunk image is already visible in this region. Re-run with an instance type that policy allows."
+    fi
     if grep -Eqi 'instance configuration for this AWS Marketplace product|supported instance types' "$err"; then
       idx=$((idx + 1))
       if ((idx < n)); then
-        if [[ "${try_modes[$idx]}" == full ]]; then
-          note "The Marketplace product rejected ${launch_type}. Retrying ${try_types[$idx]}, which is also 8 vCPU and 32 GiB, with the same encrypted gp3 root."
+        if [[ "${try_modes[$idx]}" == plain ]]; then
+          note "The Marketplace product rejected ${launch_type} with a custom gp3 root. Retrying the same type with an encrypted ${LAUNCH_VOLUME_GB} GiB gp3 root and the image's default performance."
         else
-          note "The Marketplace product rejected that shape. Retrying ${try_types[$idx]} with a ${LAUNCH_VOLUME_GB} GiB root and the image's own volume settings."
+          note "The Marketplace product rejected that disk. Retrying ${launch_type} with a ${LAUNCH_VOLUME_GB} GiB root and the image's own volume settings."
         fi
         continue
       fi
       cat "$err" >&2
       rm -f "$err"
-      die "The Marketplace product refused ${RESOLVED_AMI} in ${AWS_REGION}. The subscription is already in place. Re-run with --instance-type set to a type that product lists."
+      die "The Marketplace product refused ${launch_type} for ${RESOLVED_AMI} in ${AWS_REGION}. The subscription is already in place. Pass --instance-type with a type that product allows and that this account's organization policy allows."
     fi
     if grep -Eqi 'OptInRequired|AuthFailure|not subscribed' "$err"; then
       cat "$err" >&2

@@ -12,7 +12,7 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - The x86_64 image `ami-00eda91ac5d3c3df5` in eu-north-1, named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. That id is the image, not a secret. The script does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. If that Marketplace product rejects `m6i.2xlarge`, the script retries `m5.2xlarge` (also 8 vCPU and 32 GiB) with the same disk. If the product still rejects the encrypted gp3 root, it retries a 300 GiB root that keeps the image's own volume type. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. If that Marketplace product rejects the custom encrypted gp3 root, the script keeps `m6i.2xlarge` and retries a simpler 300 GiB root. It does not fall back to an older instance type. An organization service control policy can deny `ec2:RunInstances` for a type even when the role is AdministratorAccess. That deny is not CreateImage access. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
@@ -113,7 +113,7 @@ Re-running setup does not replace an instance that is already there. It will add
 - A VPC `10.42.0.0/16`, public subnet `10.42.1.0/24`, internet gateway, and a default route, **or** the VPC and subnet you passed. A supplied subnet is the VPN path: the instance has no public address, and `--admin-cidr` is the VPN range. The script does not change your routes.
 - A security group: TCP **8000** (Splunk Web) and TCP **8089** (splunkd) from `ADMIN_CIDR` only. No SSH. Port 22 is closed because the plan does not need it. HEC 8088 and forwarder 9997 stay closed; v1 ingest is the local modular input. Egress is TCP 443 and DNS (TCP/UDP 53) only, so the instance can reach Systems Manager. `0.0.0.0/0` is not used as an ingress rule.
 - An instance role with `AmazonSSMManagedInstanceCore`. No static keys on the instance. IMDSv2 is required.
-- One `m6i.2xlarge` instance, unless Marketplace rejects that type or you override it. The fallback type is `m5.2xlarge`. OS timezone is set to `Europe/Stockholm`.
+- One `m6i.2xlarge` instance, unless you pass `--instance-type`. The script stays on that type. OS timezone is set to `Europe/Stockholm`.
 - The Splunk 10.6.1.1 x86_64 image `ami-00eda91ac5d3c3df5`. The script does not subscribe to Marketplace.
 - One 300 GiB AMI root volume, tagged `kiruna-volume=splunk-data` and kept if the instance is stopped or terminated. The requested type is encrypted gp3. No Elastic IP and no NAT gateway, so a stop releases the public address and does not leave a NAT charge. The volume still bills while stopped.
 - Splunk is already on the image and starts with the instance. This script does not set the admin password.
