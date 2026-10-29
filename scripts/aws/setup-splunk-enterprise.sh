@@ -45,10 +45,16 @@ Optional:
                              accepts this type. It is 16 vCPU and 32 GiB.
   --volume-size-gb N         Splunk volume in GiB (default 300). This is the
                              AMI root volume, because Splunk is already on the image.
+  --environment-type VALUE   Required tag splunkit_environment_type.
+                             The organization policy denies the launch when this tag is missing.
+  --data-classification VALUE
+                             Required tag splunkit_data_classification.
+                             The organization policy denies the launch when this tag is missing.
 
 Environment variables match the flags: AWS_PROFILE, AWS_REGION (or
 AWS_DEFAULT_REGION), ADMIN_CIDR, SPLUNK_AMI_NAME, SPLUNK_AMI_ID, SPLUNK_DEMO_NAME, VPC_ID,
-SUBNET_ID, AVAILABILITY_ZONE, INSTANCE_TYPE, VOLUME_SIZE_GB.
+SUBNET_ID, AVAILABILITY_ZONE, INSTANCE_TYPE, VOLUME_SIZE_GB,
+SPLUNKIT_ENVIRONMENT_TYPE, SPLUNKIT_DATA_CLASSIFICATION.
 
 The script does not prompt. It exits 0 when the instance exists or the image
 is confirmed. It does not set the admin password or install the NFR license.
@@ -76,6 +82,8 @@ SUBNET_ID=${SUBNET_ID:-}
 AVAILABILITY_ZONE=${AVAILABILITY_ZONE:-}
 INSTANCE_TYPE=${INSTANCE_TYPE:-$DEFAULT_INSTANCE_TYPE}
 VOLUME_SIZE_GB=${VOLUME_SIZE_GB:-$DEFAULT_VOLUME_GB}
+ENVIRONMENT_TYPE=${SPLUNKIT_ENVIRONMENT_TYPE:-}
+DATA_CLASSIFICATION=${SPLUNKIT_DATA_CLASSIFICATION:-}
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -182,6 +190,24 @@ while [[ $# -gt 0 ]]; do
       VOLUME_SIZE_GB=${1#*=}
       shift
       ;;
+    --environment-type)
+      [[ $# -ge 2 ]] || die "--environment-type needs a value"
+      ENVIRONMENT_TYPE=$2
+      shift 2
+      ;;
+    --environment-type=*)
+      ENVIRONMENT_TYPE=${1#*=}
+      shift
+      ;;
+    --data-classification)
+      [[ $# -ge 2 ]] || die "--data-classification needs a value"
+      DATA_CLASSIFICATION=$2
+      shift 2
+      ;;
+    --data-classification=*)
+      DATA_CLASSIFICATION=${1#*=}
+      shift
+      ;;
     *)
       die "Unknown argument: $1 (see --help)"
       ;;
@@ -234,6 +260,11 @@ validate_args() {
   fi
   [[ -n "$AMI_NAME" ]] || die "AMI name is empty. Leave --ami-name unset to launch ${DEFAULT_AMI_NAME}."
   [[ "$AMI_NAME" != *[[:space:]]* ]] || die "AMI name must not contain spaces."
+  [[ -n "$ENVIRONMENT_TYPE" ]] || die "splunkit_environment_type is required. Pass --environment-type. The organization policy denies RunInstances when that tag is missing. The word true in a decoded deny is not the tag value."
+  [[ -n "$DATA_CLASSIFICATION" ]] || die "splunkit_data_classification is required. Pass --data-classification. The organization policy denies RunInstances when that tag is missing."
+  [[ "$ENVIRONMENT_TYPE" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]] || die "environment type must use letters, digits, dot, underscore, or hyphen."
+  [[ "$DATA_CLASSIFICATION" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$ ]] || die "data classification must use letters, digits, dot, underscore, or hyphen."
+  GOV_TAGS="{Key=splunkit_environment_type,Value=${ENVIRONMENT_TYPE}},{Key=splunkit_data_classification,Value=${DATA_CLASSIFICATION}}"
 }
 
 export AWS_PAGER=""
@@ -619,7 +650,7 @@ EOF
       --metadata-options 'HttpTokens=required,HttpEndpoint=enabled,HttpPutResponseHopLimit=2' \
       --instance-initiated-shutdown-behavior stop \
       --client-token "$token" \
-      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script},{Key=kiruna-splunk-image,Value=${RESOLVED_AMI_VERSION}}]" \
+      --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script},{Key=kiruna-splunk-image,Value=${RESOLVED_AMI_VERSION}},${GOV_TAGS}]" \
       --query 'Instances[0].InstanceId' \
       --output text 2>"$err")
     rc=$?
@@ -638,7 +669,7 @@ EOF
     if grep -Eqi 'explicit deny|service control policy|UnauthorizedOperation' "$err"; then
       cat "$err" >&2
       rm -f "$err"
-      die "An organization service control policy explicitly denied ec2:RunInstances for ${launch_type}. AdministratorAccess does not override that deny. This is not CreateImage access. The Splunk image is already visible in this region. Re-run with an instance type that policy allows."
+      die "An organization service control policy explicitly denied ec2:RunInstances for ${launch_type}. AdministratorAccess does not override that deny. This is not an instance-type list and it is not CreateImage access. The policy requires the tags splunkit_environment_type and splunkit_data_classification. This launch sent environment type ${ENVIRONMENT_TYPE} and data classification ${DATA_CLASSIFICATION}."
     fi
     if grep -Eqi 'instance configuration for this AWS Marketplace product|supported instance types' "$err"; then
       idx=$((idx + 1))
@@ -1015,7 +1046,7 @@ ensure_network() {
     set +e
     VPC_ID=$(aws_cli ec2 create-vpc \
       --cidr-block 10.42.0.0/16 \
-      --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script}]" \
+      --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=${NAME}},{Key=${TAG_KEY},Value=${TAG_VALUE}},{Key=kiruna-owned,Value=script},${GOV_TAGS}]" \
       --query 'Vpc.VpcId' \
       --output text 2>"$vpc_err")
     vpc_rc=$?

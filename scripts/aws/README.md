@@ -12,7 +12,7 @@ This is a demo host for the Kiirunavaara presentation. It does not install the d
 - The x86_64 image `ami-00eda91ac5d3c3df5` in eu-north-1, named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. That id is the image, not a secret. The script does not subscribe to Marketplace and it does not download an RPM.
 - The network you will present from, as an IPv4 CIDR. `0.0.0.0/0` is rejected.
 
-The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. The instance type is `c6i.4xlarge` (16 vCPU, 32 GiB). The Marketplace listing rejected `m6i.2xlarge`, and the organization policy denied `m5.2xlarge`. If the product rejects the custom encrypted gp3 root, the script keeps `c6i.4xlarge` and retries a simpler 300 GiB root. Record `splunk version` after the first start. This script does not install the demo app.
+The host boots `ami-00eda91ac5d3c3df5` in eu-north-1, the image named `splunk_AMI_10.6.1.1_2026-10-19_22-40-02_p42538632-7b65de6c-5006-4ca2-bd75-fdba95ae5d9d`. The script does not subscribe. The instance type is `c6i.4xlarge` (16 vCPU, 32 GiB). The Marketplace listing rejected `m6i.2xlarge`. The organization policy denies `ec2:RunInstances` and `ec2:CreateVpc` when the tags `splunkit_environment_type` and `splunkit_data_classification` are missing. Pass both values. The word `true` in a decoded deny means the tag was absent, not the value to set. If the product rejects the custom encrypted gp3 root, the script keeps the same instance type and retries a simpler 300 GiB root. Record `splunk version` after the first start. This script does not install the demo app.
 
 ## Local AWS CLI
 
@@ -33,6 +33,8 @@ Point the CLI at the Splunk AWS account with `aws configure` or an existing prof
 | `--subnet-id` | `SUBNET_ID` | with `--vpc-id` | subnet the VPN can reach |
 | `--availability-zone` | `AVAILABILITY_ZONE` | no | first available zone |
 | `--instance-type` | `INSTANCE_TYPE` | no | `c6i.4xlarge` |
+| `--environment-type` | `SPLUNKIT_ENVIRONMENT_TYPE` | yes | tag `splunkit_environment_type` |
+| `--data-classification` | `SPLUNKIT_DATA_CLASSIFICATION` | yes | tag `splunkit_data_classification` |
 | `--volume-size-gb` | `VOLUME_SIZE_GB` | no | `300` |
 
 `demo-start.sh` and `demo-stop.sh` use `--region`, `--profile`, `--name`, and optional `--instance-id` (`INSTANCE_ID`).
