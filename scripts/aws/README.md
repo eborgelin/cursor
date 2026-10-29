@@ -46,6 +46,12 @@ Daily ingest is unmeasured. The plan says not to publish a megabyte claim for th
 
 Sources used for those choices: [Reference hardware](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/performance-reference/reference-hardware), [Estimate your storage requirements](https://help.splunk.com/en/splunk-enterprise/get-started/deployment-capacity-manual/10.4/hardware-capacity-planning/estimate-your-storage-requirements), [Install on Linux](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/install-splunk-enterprise-on-linux-or-macos/install-on-linux), [Architecture and ports](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/plan-your-splunk-enterprise-installation/splunk-enterprise-architecture-and-processes), [How licensing works](https://help.splunk.com/en/splunk-enterprise/administer/admin-manual/10.4/configure-splunk-licenses/how-splunk-enterprise-licensing-works), [Plan your ITSI deployment](https://help.splunk.com/en/splunk-it-service-intelligence/splunk-it-service-intelligence/install-and-upgrade/4.21/planning/plan-your-itsi-deployment). Amazon Linux 2023 x86-64 is a supported Enterprise platform in the installation manual's system requirements.
 
+## Local shortcut
+
+The agent-store folder is deep under `~/Library`. On your Mac, run `docs/aws/link-local.sh` from this folder (paste that file into Terminal the first time). It finds the store and links `~/dev/SplunkMiningDemoApp` to it. `~/dev` is a directory in your home folder, not a user named `dev`.
+
+After it runs, the scripts are at `~/dev/SplunkMiningDemoApp/docs/aws/`. Run the script again if Cursor moves the store. It only creates the symlink. It does not read AWS keys or a Splunk password.
+
 ## Commands
 
 From a local terminal, with the CLI already aimed at eu-north-1:
