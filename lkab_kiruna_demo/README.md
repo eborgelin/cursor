@@ -16,7 +16,7 @@ and are not LKAB production data. The mine cross-section is an original schemati
   writing the lookups the dashboards read.
 - Dashboard Studio views: Shift Brief, Mine Cross-Section, Level Operations, Asset Health,
   Asset Timeline, Outbound Overview, Stuck and Recovery, Service Health.
-- Scenarios: healthy-shift, truck-stuck, loader-stopped-drawpoint, cascade, recovery.
+- Scenarios: healthy-shift, truck-stuck, loader-stopped-drawpoint, cascade-crusher-hoist, recovery.
 
 Not in 0.1.0: ITSI objects, presenter lock, custom visualizations, HEC.
 
@@ -52,5 +52,5 @@ repository root. Do not hand-edit the view XML.
 Run the generator without Splunk:
 
 ```
-python3 lkab_kiruna_demo/bin/kiruna_demo_gen.py --simulate --scenario cascade --ticks 5
+python3 lkab_kiruna_demo/bin/kiruna_demo_gen.py --simulate --scenario cascade-crusher-hoist --ticks 5
 ```
