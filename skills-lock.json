@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "skills": {
+    "custom-visualization-builder": {
+      "source": "splunk/splunk-agent-skills",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/custom-visualization-builder/SKILL.md",
+      "computedHash": "7e65a1452ebdfd53fc1bb8503ddb3ae6450b29dc5a13b43115583cfc356ce5c3"
+    }
+  }
+}
